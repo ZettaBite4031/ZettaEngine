@@ -24,7 +24,7 @@ namespace Zetta::ID {
 	constexpr ID_Type Index(ID_Type id) {
 		ID_Type index{ id & Detail::Index_Mask };
 		assert(index != Detail::Index_Mask);
-		return id & Detail::Index_Mask;
+		return index;
 	}
 
 	constexpr ID_Type Generation(ID_Type id) {

@@ -8,6 +8,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Navigation;
 
 namespace Editor.ContentToolsAPIStructs
 {
@@ -18,8 +19,22 @@ namespace Editor.ContentToolsAPIStructs
         public byte CalculateNormals = 0;
         public byte CalculateTangents = 1;
         public byte ReverseHandedness = 0;
-        public byte ImportEmbdedTextures = 1;
+        public byte ImportEmbededTextures = 1;
         public byte ImportAnimations = 1;
+
+        private byte ToByte(bool val) => val ? (byte)1 : (byte)0;
+
+        public void FromContentSettings(Content.Geometry geometry)
+        {
+            var settings = geometry.ImportSettings;
+
+            SmoothingAngle = settings.SmoothingAngle;
+            CalculateNormals = ToByte(settings.CalculateNormals);
+            CalculateTangents = ToByte(settings.CalculateTangents);
+            ReverseHandedness = ToByte(settings.ReverseHandedness);
+            ImportEmbededTextures = ToByte(settings.ImportEmbededTextures);
+            ImportAnimations = ToByte(settings.ImportAnimations);
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -57,9 +72,9 @@ namespace Editor.DLLWrapper
 {
 
 
-    static class ComponentToolsAPI
+    static class ContentToolsAPI
     {
-        private const string _ToolsDLL = "ContentTools.dll";
+        private const string _ToolsDLL = "ContentToolsDLL.dll";
 
         [DllImport(_ToolsDLL)]
         private static extern void CreatePrimitiveMesh([In, Out] SceneData data, PrimitiveInitInfo info);
@@ -69,6 +84,7 @@ namespace Editor.DLLWrapper
             using var sceneData = new SceneData();
             try
             {
+                sceneData.ImportSettings.FromContentSettings(geometry);
                 CreatePrimitiveMesh(sceneData, info);
                 Debug.Assert(sceneData.Data != IntPtr.Zero && sceneData.DataSize > 0);
                 var data = new byte[sceneData.DataSize];

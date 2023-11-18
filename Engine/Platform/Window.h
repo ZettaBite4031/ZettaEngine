@@ -6,7 +6,7 @@ namespace Zetta::Platform {
 	class Window {
 	public:
 		constexpr explicit Window(WindowID id) : _id{ id } {}
-		constexpr Window() : _id{ ID::Invalid_ID } {}
+		constexpr Window() = default;
 		constexpr WindowID GetID() const { return _id; }
 		const bool IsValid() const { return ID::IsValid(_id); }
 

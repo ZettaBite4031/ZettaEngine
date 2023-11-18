@@ -39,7 +39,7 @@ LRESULT WinProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
-class WindowTest : public Test {
+class EngineTest : public Test {
 public:
 	bool Initialize() override {
 

@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <Platforms>x64</Platforms>
+	  <XamlDebuggingInformation>True</XamlDebuggingInformation>
     <BaseOutputPath>..\</BaseOutputPath>
 	  <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 	  <EnableDefaultPageItems>false</EnableDefaultPageItems>
@@ -14,13 +15,13 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DebugEditor|x64'">
-    <NoWarn>1701;1702;8612;8618;8600;8602;8603;8604</NoWarn>
+    <NoWarn>1701;1702;8612;8618;8600;8601;8602;8603;8604;8622;8629;8625;8767</NoWarn>
     <WarningLevel>7</WarningLevel>
     <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseEditor|x64'">
-    <NoWarn>1701;1702;8612;8618;8600;8602;8603;8604</NoWarn>
+    <NoWarn>1701;1702;8612;8618;8600;8601;8602;8603;8604;8622;8629;8625;8767</NoWarn>
     <WarningLevel>7</WarningLevel>
     <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
   </PropertyGroup>
@@ -36,6 +37,7 @@
 
   <ItemGroup>
     <None Remove="MainWindow.xaml" />
+    <None Remove="Resources\PrimitiveMeshView\PlaneTexture.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -49,10 +51,17 @@
     <Compile Include="Components\Script.cs" />
     <Compile Include="Components\Transform.cs" />
     <Compile Include="Content\Asset.cs" />
+    <Compile Include="Content\AssetRegistry.cs" />
+    <Compile Include="Content\ContentBrowser\ContentBrowser.cs" />
+    <Compile Include="Content\ContentBrowser\ContentBrowserView.xaml.cs" />
     <Compile Include="Content\Geometry.cs" />
+    <Compile Include="Content\PrimitiveMeshDialog.xaml.cs" />
     <Compile Include="Dictionaries\ControlTemplates.xaml.cs" />
-    <Compile Include="DLLWrapper\ComponentToolsAPI.cs" />
+    <Compile Include="DLLWrapper\ContentToolsAPI.cs" />
     <Compile Include="DLLWrapper\EngineAPI.cs" />
+    <Compile Include="Editors\GeometryEditor\GeometryEditor.cs" />
+    <Compile Include="Editors\GeometryEditor\GeometryView.xaml.cs" />
+    <Compile Include="Editors\IAssetEditor.cs" />
     <Compile Include="Editors\WorldEditor\ComponentView.xaml.cs" />
     <Compile Include="Editors\WorldEditor\GameEntityView.xaml.cs" />
     <Compile Include="Editors\WorldEditor\ProjectLayoutView.xaml.cs" />
@@ -105,16 +114,54 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="EnginePathDialog.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </None>
+    <Resource Include="Resources\ContentBrowser\ListView.png" />
+    <Resource Include="Resources\ContentBrowser\TileView.png" />
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Resources\ContentBrowser\FolderLarge.png" />
+    <Resource Include="Resources\ContentBrowser\FolderSmall.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\PrimitiveMeshView\Checkmap.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\PrimitiveMeshView\schizo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\PrimitiveMeshView\PlaneTexture.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="EnginePathDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Include="Resources\ContentBrowser\FolderLarge.png" />
+    <None Include="Resources\ContentBrowser\FolderSmall.png" />
+    <None Include="Resources\ContentBrowser\ListView.png" />
+    <None Include="Resources\ContentBrowser\TileView.png" />
+    <None Include="Resources\PrimitiveMeshView\Checkmap.jpg" />
+    <None Include="Resources\PrimitiveMeshView\Checkmap.png" />
+    <None Include="Resources\PrimitiveMeshView\schizo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Include="Content\ContentBrowser\ContentBrowserView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Content\PrimitiveMeshDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Dictionaries\ControlTemplates.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Dictionaries\EditorColors.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Editors\GeometryEditor\GeometryView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Editors\WorldEditor\ComponentView.xaml">
@@ -150,6 +197,9 @@
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Themes\Generic.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Utilities\LoggerView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -165,10 +215,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Content\ContentBrowser\ContentBrowserView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Content\PrimitiveMeshDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
     <None Update="Dictionaries\ControlTemplates.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Dictionaries\EditorColors.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Editors\GeometryEditor\GeometryView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Editors\WorldEditor\ComponentView.xaml">
@@ -196,6 +255,9 @@
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="GameProject\OpenProjectView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Themes\Generic.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Utilities\LoggerView.xaml">

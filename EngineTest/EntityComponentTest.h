@@ -9,7 +9,7 @@
 
 using namespace Zetta;
 
-class EntityComponentTest : public Test {
+class EngineTest : public Test {
 public:
 	bool Initialize() override { 
 		srand((u32)time(nullptr));

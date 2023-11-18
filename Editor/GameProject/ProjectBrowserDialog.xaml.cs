@@ -22,6 +22,8 @@ namespace Editor.GameProject
     {
         private readonly CubicEase _easing = new CubicEase() { EasingMode = EasingMode.EaseInOut };
 
+        public static bool GoToNewProjectTab { get; set; }
+
         public ProjectBrowserDialog()
         {
             InitializeComponent();
@@ -31,12 +33,16 @@ namespace Editor.GameProject
         private void OnProjectBrowserDialogLoaded(object sender, RoutedEventArgs e)
         {
             Loaded -= OnProjectBrowserDialogLoaded;
-            if (!OpenProject.Projects.Any())
+            if (!OpenProject.Projects.Any() || GoToNewProjectTab)
             {
-                openProjectbutton.IsEnabled = false;
-                openProjectView.Visibility = Visibility.Hidden;
+                if (!GoToNewProjectTab)
+                {
+                    openProjectbutton.IsEnabled = false;
+                    openProjectView.Visibility = Visibility.Hidden;
+                }
                 OnToggleButton_Click(newProjectbutton, new RoutedEventArgs());
             }
+            GoToNewProjectTab = false;
         }
 
         private void AnimateToNewProject()

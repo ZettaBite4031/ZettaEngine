@@ -2,10 +2,14 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="RendererTest.cpp" />
+    <ClCompile Include="ShaderCompilation.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Test.h" />
     <ClInclude Include="EntityComponentTest.h" />
     <ClInclude Include="WindowTest.h" />
+    <ClInclude Include="RendererTest.h" />
+    <ClInclude Include="ShaderCompilation.h" />
   </ItemGroup>
 </Project>

@@ -19,31 +19,9 @@ namespace Zetta::Platform {
 			bool is_closed{ false };
 		};
 
-		util::vector<WindowInfo> windows;
-
-		util::vector<u32> available_slots;
-		u32 AddToWindows(WindowInfo info) {
-			u32 id{ u32_invalid_id };
-			if (available_slots.empty()) {
-				id = (u32)windows.size();
-				windows.emplace_back(info);
-			}
-			else {
-				id = available_slots.back();
-				available_slots.pop_back();
-				assert(id != u32_invalid_id);
-				windows[id] = info;
-			}
-			return id;
-		}
-
-		void RemoveFromWindows(u32 id) {
-			assert(id < windows.size());
-			available_slots.emplace_back(id);
-		}
+		util::FreeList<WindowInfo> windows;
 
 		WindowInfo& GetFromID(WindowID id) {
-			assert(id < windows.size());
 			assert(windows[id].hwnd);
 			return windows[id];
 		}
@@ -53,31 +31,34 @@ namespace Zetta::Platform {
 			return GetFromID(id);
 		}
 
-		LRESULT CALLBACK InternalWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
-			WindowInfo* info{ nullptr };
+		bool resized{ false };
 
+		LRESULT CALLBACK InternalWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			switch (msg) {
+			case WM_NCCREATE:
+			{
+				DEBUG_OP(SetLastError(0));
+				const WindowID id{ windows.Add() };
+				windows[id].hwnd = hwnd;
+				SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)id);
+				assert(GetLastError() == 0);
+			}
+				break;
 			case WM_DESTROY:
 				GetFromHandle(hwnd).is_closed = true;
 				break;
-			case WM_EXITSIZEMOVE:
-				info = &GetFromHandle(hwnd);
-				break;
 			case WM_SIZE:
-				if (wparam == SIZE_MAXIMIZED) 
-					info = &GetFromHandle(hwnd);
-				break;
-			case WM_SYSCOMMAND:
-				if (wparam == SC_RESTORE)
-					info = &GetFromHandle(hwnd);
+				resized = (wparam != SIZE_MINIMIZED);
 				break;
 			default:
 				break;
 			}
 
-			if (info) {
-				assert(info->hwnd);
-				GetClientRect(info->hwnd, info->is_fullscreen ? &info->fullscreen_area : &info->client_area);
+			if (resized && GetAsyncKeyState(VK_LBUTTON) >= 0) {
+				WindowInfo& info{ GetFromHandle(hwnd) };
+				assert(info.hwnd);
+				GetClientRect(info.hwnd, info.is_fullscreen ? &info.fullscreen_area : &info.client_area);
+				resized = false;
 			}
 
 			LONG_PTR long_ptr{ GetWindowLongPtr(hwnd, 0) };
@@ -208,14 +189,13 @@ namespace Zetta::Platform {
 		if (winfo.hwnd) {
 			DEBUG_OP(SetLastError(0));
 
-			WindowID id{ AddToWindows(winfo) };
-			SetWindowLongPtr(winfo.hwnd, GWLP_USERDATA, (LONG_PTR)id);
-
 			if(callback) SetWindowLongPtr(winfo.hwnd, 0, (LONG_PTR)callback);
 			assert(GetLastError() == 0);
 
 			ShowWindow(winfo.hwnd, SW_SHOWNORMAL);
 			UpdateWindow(winfo.hwnd);
+			WindowID id{ (ID::ID_Type)GetWindowLongPtr(winfo.hwnd, GWLP_USERDATA) };
+			windows[id] = winfo;
 			return Window{ id };
 		}
 		return {};
@@ -224,56 +204,11 @@ namespace Zetta::Platform {
 	void RemoveWindow(WindowID id) {
 		WindowInfo& info{ GetFromID(id) };
 		DestroyWindow(info.hwnd);
-		RemoveFromWindows(id);
-	}
-
-#elif
-#else
-#error At least one platform must be implmented
-#endif // _WIN64
-
-	void Window::SetFullScreen(bool fs) const{
-		assert(IsValid());
-		SetWindowFullscreen(_id, fs);
-	}
-
-	bool Window::IsFullscreen() const{
-		assert(IsValid());
-		return IsWindowFullscreen(_id);
-	}
-
-	void* Window::Handle() const{
-		assert(IsValid());
-		return GetWindowHandle(_id);
-	}
-
-	void Window::SetCaption(const wchar_t* c) const{
-		assert(IsValid());
-		SetWindowCaption(_id, c);
-	}
-
-	const Math::u32v4 Window::Size() const{
-		assert(IsValid());
-		return GetWindowSize(_id);
-	}
-
-	void Window::Resize(u32 w, u32 h) const{
-		assert(IsValid());
-		ResizeWindow(_id, w, h);
-	}
-
-	const u32 Window::Width() const{
-		Math::u32v4 s{ Size() };
-		return s.z - s.x;
-	}
-
-	const u32 Window::Height() const{
-		Math::u32v4 s{ Size() };
-		return s.w - s.y;
-	}
-
-	bool Window::IsClosed() const {
-		assert(IsValid());
-		return IsWindowClosed(_id);
+		windows.Remove(id);
 	}
 }
+
+#include "IncludeWindowCpp.h"
+
+#endif // _WIN64
+

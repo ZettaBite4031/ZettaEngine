@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -68,7 +69,7 @@ namespace {1} {{
         private static string GetNamespaceFromProjectName()
         {
             var projectName = Project.Current.Name;
-            projectName = projectName.Replace(' ', '_');
+            if (string.IsNullOrEmpty(projectName)) return string.Empty;
             return projectName;
         }
 
@@ -78,8 +79,9 @@ namespace {1} {{
             var name = scriptName.Text.Trim();
             var path = scriptPath.Text.Trim();
             string err = string.Empty;
+            var nameRegex = new Regex(@"^[A-Za-z_][A-Za-z0-9_]*$");
             if (string.IsNullOrEmpty(name)) err = "Please enter a script name";
-            else if (name.IndexOfAny(Path.GetInvalidFileNameChars()) != -1 || name.Any(x => char.IsWhiteSpace(x)))
+            else if (!nameRegex.IsMatch(name))
                 err = "Invalid character(s) used in script name";
             else if (string.IsNullOrEmpty(path)) err = "Please enter a script path";
             else if (path.IndexOfAny(Path.GetInvalidPathChars()) != -1)
@@ -161,11 +163,7 @@ namespace {1} {{
 
             string[] files = new string[] { source, header };
 
-            for (int i = 0; i < 3; i++)
-            {
-                if (!VisualStudio.AddFilesToSolution(sln, project, files)) System.Threading.Thread.Sleep(1000);
-                else break;
-            }
+            VisualStudio.AddFilesToSolution(sln, project, files);
         }
     }
 }

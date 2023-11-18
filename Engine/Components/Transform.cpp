@@ -24,10 +24,10 @@ namespace Zetta::Transform {
 			scales.emplace_back(info.scale);
 		}
 
-		return Component(TransformID{ (ID::ID_Type)positions.size() - 1 });
+		return Component{ TransformID{ entity.GetID() } };
 	}
 
-	void RemoveTransform(Component c) {
+	void RemoveTransform([[maybe_unused]] Component c) {
 		assert(c.IsValid());
 
 	}

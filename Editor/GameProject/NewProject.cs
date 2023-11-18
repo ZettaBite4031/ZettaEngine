@@ -8,6 +8,7 @@ using System.IO.Packaging;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Editor.GameProject
@@ -93,7 +94,7 @@ namespace Editor.GameProject
             }
         }
 
-        private ObservableCollection<ProjectTemplate> _projectTemplates = new ObservableCollection<ProjectTemplate>();
+        private readonly ObservableCollection<ProjectTemplate> _projectTemplates = new ObservableCollection<ProjectTemplate>();
         public ReadOnlyObservableCollection<ProjectTemplate> ProjectTemplates { get; }
 
         private bool ValidateProjectPath()
@@ -101,16 +102,16 @@ namespace Editor.GameProject
             var path = ProjectPath;
             if (!Path.EndsInDirectorySeparator(path)) path += @"\";
             path += $@"{ProjectName}\";
+            var nameRegex = new Regex(@"^[A-Za-z_][A-Za-z0-9_]*$");
 
             IsValid = false;
             if (string.IsNullOrWhiteSpace(ProjectName.Trim()))
             {
                 ErrorMsg = "Type in a project name.";
             }
-            else if (ProjectName.IndexOfAny(Path.GetInvalidFileNameChars()) != -1)
+            else if (!nameRegex.IsMatch(ProjectName))
             {
-                char invalid_char = ProjectName[ProjectName.IndexOfAny(Path.GetInvalidFileNameChars())];
-                ErrorMsg = $"Invalid character in project name: {invalid_char}";
+                ErrorMsg = "Invalid character(s) in project name";
             }
             else if (string.IsNullOrWhiteSpace(ProjectPath.Trim()))
             {
@@ -174,13 +175,13 @@ namespace Editor.GameProject
             Debug.Assert(File.Exists(Path.Combine(template.TemplatePath, "MSVCSolution")));
             Debug.Assert(File.Exists(Path.Combine(template.TemplatePath, "MSVCProject")));
 
-            var engineAPIPath = Path.Combine(MainWindow.ZettaPath, @"Engine\EngineAPI");
+            var engineAPIPath = @"$(ZETTA_ENGINE)Engine\EngineAPI\";
             Debug.Assert(Directory.Exists(engineAPIPath));
 
             var _0 = ProjectName;
             var _1 = "{" + Guid.NewGuid().ToString().ToUpper() + "}";
             var _2 = engineAPIPath;
-            var _3 = MainWindow.ZettaPath;
+            var _3 = "$(ZETTA_ENGINE)";
 
             var solution = File.ReadAllText(Path.Combine(template.TemplatePath, "MSVCSolution"));
             solution = string.Format(solution, _0, _1, "{" + Guid.NewGuid().ToString().ToUpper() + "}");

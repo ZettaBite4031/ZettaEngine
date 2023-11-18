@@ -1,8 +1,9 @@
 #include "ContentLoader.h"
 
-#include "../Components/Entity.h"
-#include "../Components/Transform.h"
-#include "../Components/Script.h"
+#include "Components/Entity.h"
+#include "Components/Transform.h"
+#include "Components/Script.h"
+#include "Graphics/Renderer.h"
 
 #if !defined(SHIPPING)
 #include <fstream>
@@ -48,7 +49,7 @@ namespace Zetta::Content {
 			if (!name_length) return false;
 
 			assert(name_length < 256);
-			char script_name[256];
+			char script_name[256]{};
 			memcpy(&script_name[0], data, name_length); data += name_length;
 			script_name[name_length] = 0; // Zero-Terminated C-String
 			script_info.script_creator = Script::Detail::GetScriptCreatorInternal(Script::Detail::StringHash()(script_name));
@@ -61,26 +62,34 @@ namespace Zetta::Content {
 		static_assert(_countof(component_readers) == ComponentType::count);
 	}
 
-	bool LoadGame() {
-		// set the working directory to exe path
-		wchar_t path[MAX_PATH];
-		const u32 length{ GetModuleFileName(0, &path[0], MAX_PATH) };
-		if (!length || GetLastError() == ERROR_INSUFFICIENT_BUFFER) return false;
-		std::filesystem::path p{ path };
-		SetCurrentDirectory(p.parent_path().wstring().c_str());
+	bool ReadFile(std::filesystem::path path, std::unique_ptr<u8[]>& data, u64& size) {
+		if (!std::filesystem::exists(path)) return false;
 
-		// read game.bin and create the entities
-		std::ifstream game("game.bin", std::ios::in | std::ios::binary);
-		util::vector<u8> buffer(std::istreambuf_iterator<char>(game), {});
-		assert(buffer.size());
-		const u8* at{ buffer.data() };
+		size = std::filesystem::file_size(path);
+		assert(size);
+		if (!size) return false;
+		data = std::make_unique<u8[]>(size);
+		std::ifstream file{ path, std::ios::in | std::ios::binary };
+		if (!file || !file.read((char*)data.get(), size)) { file.close(); return false; }
+
+		file.close();
+		return true;
+	}
+
+	bool LoadGame() {
+		
+		std::unique_ptr<u8[]> game_data{};
+		u64 size{ 0 };
+		if (!ReadFile("game.bin", game_data, size)) return false;
+		assert(game_data.get());
+		const u8* at{ game_data.get() };
 		constexpr u32 su32{ sizeof(u32) };
 		const u32 num_entities{ *at }; at += su32;
 		if (!num_entities) return false;
 
 		for (u32 entity_index{ 0 }; entity_index < num_entities; entity_index++) {
 			GameEntity::EntityInfo info{};
-			const u32 entity_type{ *at }; at += su32;
+			[[maybe_unused]] const u32 entity_type{ *at }; at += su32;
 			const u32 num_components{ *at }; at += su32;
 			if (!num_components) return false;
 
@@ -96,12 +105,18 @@ namespace Zetta::Content {
 			entities.emplace_back(entity);
 		}
 
-		assert(at == buffer.data() + buffer.size());
+		assert(at == game_data.get() + size);
 		return true;
 	}
 
 	void UnloadGame() {
 		for (auto entity : entities) GameEntity::RemoveGameEntity(entity.GetID());
+	}
+
+
+	bool LoadEngineShaders(std::unique_ptr<u8[]>& shaders, u64& size) {
+		auto path = Graphics::GetEngineShadersPath();
+		return ReadFile(path, shaders, size);
 	}
 }
 #endif

@@ -1,7 +1,9 @@
-﻿using Editor.GameProject;
+﻿using Editor.Content;
+using Editor.GameProject;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -46,16 +48,27 @@ namespace Editor
         {
             Loaded -= OnMainWindowLoaded;
             GetEnginePath();
-            OnProjectBrowserDialog();
+            OpenProjectBrowserDialog();
         }
 
         private void OnMainWindowClosing(object sender, CancelEventArgs e)
         {
-            Closing -= OnMainWindowClosing;
-            Project.Current?.Unload();
+            if (DataContext == null)
+            {
+                e.Cancel = true;
+                Application.Current.MainWindow.Hide();
+                OpenProjectBrowserDialog();
+                if (DataContext != null)
+                    Application.Current.MainWindow.Show();
+            }
+            else
+            {
+                Closing -= OnMainWindowClosing;
+                Project.Current?.Unload();
+            }
         }
 
-        private void OnProjectBrowserDialog()
+        private void OpenProjectBrowserDialog()
         {
             var projectBrowser = new ProjectBrowserDialog();
             if (projectBrowser.ShowDialog() == false || projectBrowser.DataContext == null) 
@@ -63,7 +76,10 @@ namespace Editor
             else
             {
                 Project.Current?.Unload();
-                DataContext = projectBrowser.DataContext;
+                var project = projectBrowser.DataContext as Project;
+                Debug.Assert(project != null);
+                AssetRegistry.Reset(project.ContentPath);
+                DataContext = project;
             }           
         }
     }
