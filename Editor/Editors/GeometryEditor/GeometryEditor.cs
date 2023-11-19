@@ -79,7 +79,7 @@ namespace Editor.Editors
 					CameraDirection = new Vector3D(-value.X, -value.Y, -value.Z);
 					OnPropertyChanged(nameof(OffsetCameraPosition));
 					OnPropertyChanged(nameof(CameraPosition));
-                }
+				}
 			}
 		}
 
@@ -158,7 +158,7 @@ namespace Editor.Editors
 		}
 
 		public MeshRenderer(MeshLOD lod, MeshRenderer old)
-        {
+		{
 			Debug.Assert(lod?.Meshes.Any() == true);
 			// Calculate vertex size minus the position and normal vectors
 			var offset = lod.Meshes[0].VertexSize - 3 * sizeof(float) - sizeof(int) - 2 * sizeof(short);
@@ -233,26 +233,12 @@ namespace Editor.Editors
 
 				CameraTarget = new Point3D(minX + width * 0.5, minY + height * 0.5, minZ + depth * 0.5);
 			}
-        }
-    }
-
-    class GeometryEditor : ViewModelBase, IAssetEditor
-    {
-		public Content.Asset Asset => _Geometry;
-
-		private MeshRenderer _MeshRenderer;
-		public MeshRenderer MeshRenderer
-		{
-			get => _MeshRenderer;
-			set
-			{
-				if (_MeshRenderer != value)
-				{
-					_MeshRenderer = value;
-					OnPropertyChanged(nameof(MeshRenderer));
-				}
-			}
 		}
+	}
+
+	class GeometryEditor : ViewModelBase, IAssetEditor
+	{
+		Asset IAssetEditor.Asset => _Geometry;
 
 		private Content.Geometry _Geometry;
 		public Content.Geometry Geometry
@@ -268,14 +254,112 @@ namespace Editor.Editors
 			}
 		}
 
+		private MeshRenderer _MeshRenderer;
+		public MeshRenderer MeshRenderer
+		{
+			get => _MeshRenderer;
+			set
+			{
+				if (_MeshRenderer != value)
+				{
+					_MeshRenderer = value;
+					OnPropertyChanged(nameof(MeshRenderer));
+					var LODs = Geometry.GetLODGroup().LODs;
+					MaxLODIndex = (LODs.Count > 0) ? LODs.Count - 1 : 0;
+					OnPropertyChanged(nameof(MaxLODIndex));
+					if (LODs.Count > 1)
+					{
+						MeshRenderer.PropertyChanged += (s, e) =>
+						{
+							if (e.PropertyName == nameof(MeshRenderer.OffsetCameraPosition) && AutoLOD) ComputeLODs(LODs);
+						};
+						ComputeLODs(LODs);
+					}
+				}
+			}
+		}
+
+		private bool _AutoLOD = true;
+		public bool AutoLOD
+		{
+			get => _AutoLOD;
+			set
+			{
+				if (_AutoLOD != value)
+				{
+					_AutoLOD = value;
+					OnPropertyChanged(nameof(AutoLOD));
+				}
+			}
+		}
+
+		public int MaxLODIndex { get; private set; }
+
+		private int _LodIndex;
+		public int LodIndex
+		{
+			get => _LodIndex;
+			set
+			{
+				var lods = Geometry.GetLODGroup().LODs;
+				value = Math.Clamp(value, 0, lods.Count - 1);
+				if (_LodIndex != value)
+				{
+					_LodIndex = value;
+					OnPropertyChanged(nameof(LodIndex));
+					MeshRenderer = new MeshRenderer(lods[value], MeshRenderer);
+				}
+			}
+		}
+
+		private void ComputeLODs(ObservableCollection<MeshLOD> LODs)
+		{
+			if (!AutoLOD) return;
+
+			var p = MeshRenderer.OffsetCameraPosition;
+			var d = new Vector3D(p.X, p.Y, p.Z).Length;
+			for (int i = MaxLODIndex; i >= 0; i--)
+			{
+				if (LODs[i].LODThreshold < d)
+				{
+					LodIndex = i;
+					break;
+				}
+			}
+		}
+
 		public void SetAsset(Content.Asset asset)
 		{
 			Debug.Assert(asset is Content.Geometry);
 			if (asset is Content.Geometry geometry)
 			{
 				Geometry = geometry;
-				MeshRenderer = new MeshRenderer(Geometry.GetLODGroup().LODs[0], MeshRenderer);
+				var numLODs = Geometry.GetLODGroup().LODs.Count;
+				if (LodIndex >= numLODs)
+				{
+					LodIndex = numLODs - 1;
+				}
+				else MeshRenderer = new MeshRenderer(Geometry.GetLODGroup().LODs[0], MeshRenderer);
 			}
 		}
-    }
+
+		public async void SetAsset(AssetInfo info)
+		{
+			try
+			{
+				Debug.Assert(info != null && File.Exists(info.FullPath));
+				var geometry = new Content.Geometry();
+				await Task.Run(() =>
+				{
+					geometry.Load(info.FullPath);
+				});
+
+				SetAsset(geometry);
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine(ex.Message);
+			}
+		}
+	}
 }

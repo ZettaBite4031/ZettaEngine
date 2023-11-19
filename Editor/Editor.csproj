@@ -42,6 +42,7 @@
 
   <ItemGroup>
     <Compile Include="App.xaml.cs" />
+	<Compile Include="AssemblyInfo.cs" />
     <Compile Include="Common\CommandRelay.cs" />
     <Compile Include="Common\Helpers.cs" />
     <Compile Include="Common\ViewModelBase.cs" />
@@ -54,12 +55,16 @@
     <Compile Include="Content\AssetRegistry.cs" />
     <Compile Include="Content\ContentBrowser\ContentBrowser.cs" />
     <Compile Include="Content\ContentBrowser\ContentBrowserView.xaml.cs" />
+    <Compile Include="Content\ContentBrowser\ContentInfoCache.cs" />
+    <Compile Include="Content\ContentBrowser\SaveDialog.xaml.cs" />
+    <Compile Include="Content\ContentWatcher.cs" />
     <Compile Include="Content\Geometry.cs" />
     <Compile Include="Content\PrimitiveMeshDialog.xaml.cs" />
     <Compile Include="Dictionaries\ControlTemplates.xaml.cs" />
     <Compile Include="DLLWrapper\ContentToolsAPI.cs" />
     <Compile Include="DLLWrapper\EngineAPI.cs" />
     <Compile Include="Editors\GeometryEditor\GeometryEditor.cs" />
+    <Compile Include="Editors\GeometryEditor\GeometryEditorView.xaml.cs" />
     <Compile Include="Editors\GeometryEditor\GeometryView.xaml.cs" />
     <Compile Include="Editors\IAssetEditor.cs" />
     <Compile Include="Editors\WorldEditor\ComponentView.xaml.cs" />
@@ -152,6 +157,9 @@
     <Page Include="Content\ContentBrowser\ContentBrowserView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Content\ContentBrowser\SaveDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Content\PrimitiveMeshDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -159,6 +167,9 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Dictionaries\EditorColors.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Editors\GeometryEditor\GeometryEditorView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Editors\GeometryEditor\GeometryView.xaml">
@@ -218,6 +229,9 @@
     <None Update="Content\ContentBrowser\ContentBrowserView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
+    <None Update="Content\ContentBrowser\SaveDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
     <None Update="Content\PrimitiveMeshDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
@@ -225,6 +239,9 @@
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Dictionaries\EditorColors.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Editors\GeometryEditor\GeometryEditorView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Editors\GeometryEditor\GeometryView.xaml">

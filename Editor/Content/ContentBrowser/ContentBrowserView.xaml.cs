@@ -1,7 +1,9 @@
-﻿using Editor.GameProject;
+﻿using Editor.Editors;
+using Editor.GameProject;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -89,15 +91,51 @@ namespace Editor.Content
     /// <summary>
     /// Interaction logic for ContentBrowserView.xaml
     /// </summary>
-    public partial class ContentBrowserView : UserControl
+    public partial class ContentBrowserView : UserControl, IDisposable
     {
         private string _sortedProperty = nameof(ContentInfo.FileName);
         private ListSortDirection _sortDirection;
+
+        public SelectionMode SelectionMode
+        {
+            get => (SelectionMode)GetValue(SelectionModeProperty);
+            set => SetValue(SelectionModeProperty, value);
+        }
+
+        // using a DependencyProperty as the backing store for SelectionMode 
+        // enabling animation, styling, binding, and more
+        public static readonly DependencyProperty SelectionModeProperty =
+            DependencyProperty.Register(nameof(SelectionMode), typeof(SelectionMode), typeof(ContentBrowserView), new PropertyMetadata(SelectionMode.Extended));
+
+        public FileAccess FileAccess
+        {
+            get => (FileAccess)GetValue(FileAccessProperty);
+            set => SetValue(FileAccessProperty, value); 
+        }
+
+        // using a DependencyProperty as the backing store for FileAccess 
+        // enabling animation, styling, binding, and more
+        public static readonly DependencyProperty FileAccessProperty =
+            DependencyProperty.Register(nameof(FileAccess), typeof(FileAccess), typeof(ContentBrowserView), new PropertyMetadata(FileAccess.ReadWrite));
+
+        internal ContentInfo SelectedItem
+        {
+            get { return (ContentInfo)GetValue(SelectedItemProperty); }
+            set { SetValue(SelectedItemProperty, value); }
+        }
+
+        // using a DependencyProperty as the backing store for SelectedItem 
+        // enabling animation, styling, binding, and more
+        public static readonly DependencyProperty SelectedItemProperty =
+            DependencyProperty.Register(nameof(SelectedItem), typeof(ContentInfo), typeof(ContentBrowserView), new PropertyMetadata(null));
+                
+
         public ContentBrowserView()
         {
             DataContext = null;
             InitializeComponent();
             Loaded += OnContentBrowserLoaded;
+            AllowDrop = true;
         }
 
         private void OnContentBrowserLoaded(object sender, RoutedEventArgs e)
@@ -232,6 +270,99 @@ namespace Editor.Content
                 var vm = DataContext as ContentBrowser;
                 vm.SelectedFolder = info.FullPath;
             }
+            else if (FileAccess.HasFlag(FileAccess.Read))
+            {
+                var assetInfo = Asset.GetAssetInfo(info.FullPath);
+                if (assetInfo != null) OpenAssetEditor(assetInfo);
+                
+            }
+        }
+
+        private IAssetEditor OpenAssetEditor(AssetInfo info)
+        {
+            IAssetEditor editor = null;
+
+            try
+            {
+                switch (info.Type)
+                {
+                    case AssetType.Animation: break;
+                    case AssetType.Audio: break;
+                    case AssetType.Material: break;
+                    case AssetType.Mesh:
+                        editor = OpenEditorPanel<GeometryEditorView>(info, info.Guid, "GeometryEditor");
+                        break;
+                    case AssetType.Skeleton: break;
+                    case AssetType.Texture: break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+            }
+
+            return editor;
+        }
+        
+        private IAssetEditor OpenEditorPanel<T>(AssetInfo info, Guid guid, string title)
+            where T : FrameworkElement, new()
+        {
+            foreach (Window window in Application.Current.Windows)
+            {
+                if (window.Content is FrameworkElement content && 
+                    content.DataContext is IAssetEditor editor && 
+                    editor.Asset.Guid == info.Guid)
+                {
+                    window.Activate();
+                    return editor;
+                }
+            }
+
+            var newEditor = new T();
+            Debug.Assert(newEditor.DataContext is IAssetEditor);
+            (newEditor.DataContext as IAssetEditor).SetAsset(info);
+
+            var win = new Window()
+            {
+                Content = newEditor,
+                Title = title,
+                Owner = Application.Current.MainWindow,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Style = Application.Current.FindResource("ZettaWindowStyle") as Style
+            };
+
+            win.Show();
+            return newEditor as IAssetEditor;
+        }
+
+        private void OnFolderContent_ListView_Drop(object sender, DragEventArgs e)
+        {
+            var vm = DataContext as ContentBrowser;
+            if (vm.SelectedFolder != null && e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                if (files?.Length > 0 && Directory.Exists(vm.SelectedFolder))
+                {
+                    _ = ContentHelper.ImportFilesAsync(files, vm.SelectedFolder);
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void OnFolderContent_ListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var item = folderListView.SelectedItem as ContentInfo;
+            SelectedItem = item?.IsDirectory == true ? null : item;
+        }
+
+        public void Dispose()
+        {
+            if (Application.Current?.MainWindow != null)
+            {
+                Application.Current.MainWindow.DataContextChanged -= OnProjectChanged;
+            }
+            (DataContext as ContentBrowser)?.Dispose();
+            DataContext = null;
         }
     }
 }

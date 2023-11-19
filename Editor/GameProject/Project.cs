@@ -31,6 +31,7 @@ namespace Editor.GameProject
         public string FullPath => $@"{Path}{Name}\{Name}{Extension}";
         public string Solution => $@"{Path}{Name}\{Name}.sln";
         public string ContentPath => $@"{Path}{Name}\Content\";
+        public string TempFolder => $@"{Path}{Name}\.zetta\Temp\";
 
         private int _BuildConfig;
         [DataMember]
@@ -161,6 +162,12 @@ namespace Editor.GameProject
             VisualStudio.CloseVisualStudio();
             UndoRedo.Reset();
             Logger.Clear();
+            DeleteTempFolder();
+        }
+
+        private void DeleteTempFolder()
+        {
+            if(Directory.Exists(TempFolder)) Directory.Delete(TempFolder, true);
         }
 
         public static void Save(Project project)

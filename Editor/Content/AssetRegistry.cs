@@ -18,15 +18,6 @@ namespace Editor.Content
         private static readonly Dictionary<string, AssetInfo> _assetDictionary = new Dictionary<string, AssetInfo>();
         private static readonly ObservableCollection<AssetInfo> _assets = new ObservableCollection<AssetInfo>();
         public static ReadOnlyObservableCollection<AssetInfo> Assets { get; } = new ReadOnlyObservableCollection<AssetInfo>(_assets);
-        private static readonly FileSystemWatcher _contentWatcher = new FileSystemWatcher()
-        {
-            IncludeSubdirectories = true,
-            Filter = "",
-            NotifyFilter = NotifyFilters.CreationTime |
-                           NotifyFilters.DirectoryName |
-                           NotifyFilters.FileName | 
-                           NotifyFilters.LastWrite
-        };
 
         private static void RegisterAllAssets(string path)
         {
@@ -68,20 +59,25 @@ namespace Editor.Content
             }
         }
 
-        public static void Clear()
+        private static void OnContentModified(object sender, ContentModifiedEventArgs e)
         {
-            _contentWatcher.EnableRaisingEvents = false;
-            _assetDictionary.Clear();
-            _assets.Clear();
+            if (ContentHelper.IsDirectory(e.FullPath)) RegisterAllAssets(e.FullPath);
+            else if (File.Exists(e.FullPath)) RegisterAsset(e.FullPath);
+
+            _assets.Where(x => !File.Exists(x.FullPath)).ToList().ForEach(x => UnregisterAsset(x.FullPath));
         }
 
         public static void Reset(string contentFolder)
         {
-            Clear();
+            ContentWatcher.ContentModified -= OnContentModified;
+
+            _assetDictionary.Clear();
+            _assets.Clear();
+
             Debug.Assert(Directory.Exists(contentFolder));
             RegisterAllAssets(contentFolder);
-            _contentWatcher.Path = contentFolder;
-            _contentWatcher.EnableRaisingEvents = true;
+
+            ContentWatcher.ContentModified += OnContentModified;
         }
 
         public static AssetInfo GetAssetInfo(Guid guid) => _assets.FirstOrDefault(x => x.Guid == guid);
@@ -95,33 +91,6 @@ namespace Editor.Content
             {
                 _refreshTimer.Trigger(e);
             }));
-        }
-
-        private static void Refresh(object s, DelayEventTimerArgs e)
-        {
-            foreach (var item in e.Data)
-            {
-                if (!(item is FileSystemEventArgs eventArgs)) continue;
-
-                if (eventArgs.ChangeType == WatcherChangeTypes.Deleted)
-                    UnregisterAsset(eventArgs.FullPath);
-                else
-                {
-                    RegisterAsset(eventArgs.FullPath);
-                    if (eventArgs.ChangeType == WatcherChangeTypes.Renamed)
-                        _assetDictionary.Keys.Where(key => !File.Exists(key)).ToList().ForEach(file => UnregisterAsset(file));
-                }
-            }
-        }
-
-        static AssetRegistry()
-        {
-            _contentWatcher.Changed += OnContentModified;
-            _contentWatcher.Created += OnContentModified;
-            _contentWatcher.Deleted += OnContentModified;
-            _contentWatcher.Renamed += OnContentModified;
-
-            _refreshTimer.Triggered += Refresh;
         }
     }
 }

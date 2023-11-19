@@ -3,10 +3,12 @@
   <ItemGroup>
     <ClCompile Include="MeshPrimitives.cpp" />
     <ClCompile Include="Geometry.cpp" />
+    <ClCompile Include="fbxImporter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ToolsCommon.h" />
     <ClInclude Include="MeshPrimitives.h" />
     <ClInclude Include="Geometry.h" />
+    <ClInclude Include="fbxImporter.h" />
   </ItemGroup>
 </Project>

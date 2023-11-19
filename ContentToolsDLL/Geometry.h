@@ -27,6 +27,8 @@ namespace Zetta::Tools {
 		util::vector<Math::v3>					normals;
 		util::vector<Math::v4>					tangents;
 		util::vector<util::vector<Math::v2>>	uv_sets;
+		util::vector<u32>						material_indices;
+		util::vector<u32>						material_used;
 
 		util::vector<u32>						raw_indices;
 
