@@ -36,7 +36,7 @@ if (FAILED(x)) {							\
 	__debugbreak();							\
 }
 #endif
-#define NAME_D3D12_OBJECT(obj, name) obj->SetName(name); OutputDebugString(L"::D3D12 Object Create: "); OutputDebugString(name); OutputDebugString(L"\n");
+#define NAME_D3D12_OBJECT(obj, name) obj->SetName(name); OutputDebugString(L"::D3D12 Object Created: "); OutputDebugString(name); OutputDebugString(L"\n");
 #define NAME_D3D12_OBJECT_INDEXED(obj, idx, name)			\
 {															\
 	wchar_t full_name[128];									\
@@ -47,13 +47,20 @@ if (FAILED(x)) {							\
 		OutputDebugString(L"\n");							\
 	}														\
 }
+#ifndef DEBUG_OP
+#define DEBUG_OP(x) x
+#endif
 #else
 #ifndef DXCall
 #define DXCall(x) x
 #endif
 #define NAME_D3D12_OBJECT(obj, name) ((void)0)
 #define NAME_D3D12_OBJECT_INDEXED(obj, idx, name) ((void)0)
+#ifndef DEBUG_OP
+#define DEBUG_OP(x) ((void*)0)
 #endif
+#endif
+
 
 #include "D3D12Helpers.h"
 #include "D3D12Resources.h"

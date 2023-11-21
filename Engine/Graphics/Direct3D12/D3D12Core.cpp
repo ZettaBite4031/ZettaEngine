@@ -3,6 +3,10 @@
 #include "D3D12Shaders.h"
 #include "D3D12GPass.h"
 #include "D3D12PostProcess.h"
+#include "D3D12Upload.h"
+
+extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 611; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\"; }
 
 using namespace Microsoft::WRL;
 
@@ -53,6 +57,7 @@ namespace Zetta::Graphics::D3D12::Core {
 
 				_fence_event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 				assert(_fence_event);
+				if (!_fence_event) goto _error;
 
 				return;
 
@@ -282,7 +287,8 @@ namespace Zetta::Graphics::D3D12::Core {
 		new (&gfx_command) D3D12Command(main_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
 		if (!gfx_command.CommandQueue()) return FailedInit();
 
-		if (!(Shaders::Initialize() && GPass::Initialize() && FX::Initialize())) return FailedInit();
+		if (!(Shaders::Initialize() && GPass::Initialize() 
+			&& FX::Initialize() && Upload::Initialize())) return FailedInit();
 
 		NAME_D3D12_OBJECT(main_device, L"Main D3D12 Device");
 		NAME_D3D12_OBJECT(rtv_desc_heap.Heap(), L"RTV Descriptor Heap");
@@ -301,6 +307,7 @@ namespace Zetta::Graphics::D3D12::Core {
 		//		 Before their depending resources are released
 		for (u32 i{ 0 }; i < FrameBufferCount; i++) ProcessDeferredReleases(i);
 
+		Upload::Shutdown();
 		FX::Shutdown();
 		GPass::Shutdown();
 		Shaders::Shutdown();

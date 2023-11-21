@@ -1,6 +1,5 @@
 #pragma once
 #include "D3D12CommonHeaders.h"
-#include <mutex>
 
 namespace Zetta::Graphics::D3D12{
 	class DescriptorHeap;
@@ -72,13 +71,13 @@ namespace Zetta::Graphics::D3D12{
 		explicit D3D12Texture(D3D12TextureInitInfo info);
 		DISABLE_COPY(D3D12Texture);
 
-		constexpr D3D12Texture(D3D12Texture&& o)
-			: _resource{ o._resource }, _srv{ o._srv }
+		constexpr D3D12Texture(D3D12Texture&& o) noexcept
+			: _resource{ o._resource }, _srv{ o._srv } 
 		{
 			o.Reset();
 		}
 
-		constexpr D3D12Texture& operator=(D3D12Texture&& o) {
+		constexpr D3D12Texture& operator=(D3D12Texture&& o) noexcept {
 			assert(this != &o);
 			if (this != &o) {
 				Release();
@@ -115,13 +114,13 @@ namespace Zetta::Graphics::D3D12{
 		D3D12RenderTexture() = default;
 		explicit D3D12RenderTexture(D3D12TextureInitInfo info);
 		DISABLE_COPY(D3D12RenderTexture);
-		constexpr D3D12RenderTexture(D3D12RenderTexture&& o)
+		constexpr D3D12RenderTexture(D3D12RenderTexture&& o) noexcept
 			: _texture{ std::move(o._texture) }, _mip_count{ o._mip_count } {
 			for (u32 i{ 0 }; i < _mip_count; i++) _rtv[i] = o._rtv[i];
 			o.Reset();
 		}
 
-		constexpr D3D12RenderTexture& operator=(D3D12RenderTexture&& o) {
+		constexpr D3D12RenderTexture& operator=(D3D12RenderTexture&& o) noexcept {
 			assert(this != &o);
 			if (this != &o) {
 				Release();
@@ -161,12 +160,12 @@ namespace Zetta::Graphics::D3D12{
 		D3D12DepthBuffer() = default;
 		explicit D3D12DepthBuffer(D3D12TextureInitInfo info);
 		DISABLE_COPY(D3D12DepthBuffer);
-		constexpr D3D12DepthBuffer(D3D12DepthBuffer&& o)
+		constexpr D3D12DepthBuffer(D3D12DepthBuffer&& o) noexcept
 			: _texture{ std::move(o._texture) }, _dsv{ o._dsv } {
 			o._dsv = {};
 		}
 
-		constexpr D3D12DepthBuffer& operator=(D3D12DepthBuffer&& o) {
+		constexpr D3D12DepthBuffer& operator=(D3D12DepthBuffer&& o) noexcept {
 			assert(this != &o);
 			if (this != &o) {
 				_texture = std::move(o._texture);

@@ -1,14 +1,12 @@
 #include "D3D12Shaders.h"
 #include "Content/ContentLoader.h"
+#include "Content/ContentToEngine.h"
 
 namespace Zetta::Graphics::D3D12::Shaders {
 	namespace {
-		typedef struct CompiledShader {
-			u64 size;
-			const u8* byte_code;
-		} const *pCompiledShader;
+		
 
-		pCompiledShader engine_shaders[EngineShader::count];
+		Content::pCompiledShader engine_shaders[EngineShader::count];
 
 		std::unique_ptr<u8[]> shader_blob{};
 
@@ -22,12 +20,12 @@ namespace Zetta::Graphics::D3D12::Shaders {
 			u32 index{ 0 };
 			while (offset < size && res) {
 				assert(index < EngineShader::count);
-				pCompiledShader& shader{ engine_shaders[index] };
+				Content::pCompiledShader& shader{ engine_shaders[index] };
 				assert(!shader);
 				res &= index < EngineShader::count && !shader;
 				if (!res) break;
-				shader = reinterpret_cast<const pCompiledShader>(&shader_blob[offset]);
-				offset += sizeof(u64) + shader->size;
+				shader = reinterpret_cast<const Content::pCompiledShader>(&shader_blob[offset]);
+				offset += sizeof(u64) + Content::CompiledShader::hash_length + shader->ByteCodeSize();
 				index++;
 			}
 			assert(offset == size && index == EngineShader::count);
@@ -47,8 +45,8 @@ namespace Zetta::Graphics::D3D12::Shaders {
 
 	D3D12_SHADER_BYTECODE GetEngineShader(EngineShader::id id) {
 		assert(id < EngineShader::count);
-		const pCompiledShader shader{ engine_shaders[id] };
-		assert(shader && shader->size);
-		return { &shader->byte_code, shader->size };
+		const Content::pCompiledShader& shader{ engine_shaders[id] };
+		assert(shader && shader->ByteCodeSize());
+		return { shader->ByteCode(), shader->ByteCodeSize() };
 	}
 }

@@ -63,6 +63,7 @@
     <Compile Include="Dictionaries\ControlTemplates.xaml.cs" />
     <Compile Include="DLLWrapper\ContentToolsAPI.cs" />
     <Compile Include="DLLWrapper\EngineAPI.cs" />
+    <Compile Include="Editors\GeometryEditor\GeometryDetailsView.xaml.cs" />
     <Compile Include="Editors\GeometryEditor\GeometryEditor.cs" />
     <Compile Include="Editors\GeometryEditor\GeometryEditorView.xaml.cs" />
     <Compile Include="Editors\GeometryEditor\GeometryView.xaml.cs" />
@@ -169,6 +170,9 @@
     <Page Include="Dictionaries\EditorColors.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Editors\GeometryEditor\GeometryDetailsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Editors\GeometryEditor\GeometryEditorView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -239,6 +243,9 @@
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Dictionaries\EditorColors.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Editors\GeometryEditor\GeometryDetailsView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Editors\GeometryEditor\GeometryEditorView.xaml">

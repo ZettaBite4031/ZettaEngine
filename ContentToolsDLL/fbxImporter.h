@@ -32,8 +32,9 @@ namespace Zetta::Tools {
 	private:
 		bool InitializeFBX();
 		void LoadFBXFile(const char* file);
-		void GetMesh(FbxNode* node, util::vector<Mesh>& meshes);
-		void GetLODGroup(FbxNode* node);
+		void GetMeshes(FbxNode* node, util::vector<Mesh>& meshes, u32 lod_id, f32 lod_threshold);
+		void GetMesh(FbxNodeAttribute* attribute, util::vector<Mesh>& meshes, u32 lod_id, f32 lod_threshold);
+		void GetLODGroup(FbxNodeAttribute* attribute);
 		bool GetMeshData(FbxMesh* fbx_mesh, Mesh& m);
 
 		Scene* _scene{ nullptr };

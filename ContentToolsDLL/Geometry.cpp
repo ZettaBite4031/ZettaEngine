@@ -1,4 +1,5 @@
 #include "Geometry.h"
+#include "../Utilities/IOStream.h"
 
 namespace Zetta::Tools {
     namespace {
@@ -6,8 +7,7 @@ namespace Zetta::Tools {
         using namespace Math;
         using namespace DirectX;
 
-        void
-            recalculate_normals(Mesh& m)
+        void RecalculateNormals(Mesh& m)
         {
             const u32 num_indices{ (u32)m.raw_indices.size() };
             m.normals.resize(num_indices);
@@ -32,8 +32,7 @@ namespace Zetta::Tools {
             }
         }
 
-        void
-            process_normals(Mesh& m, f32 smoothing_angle)
+        void ProcessNormals(Mesh& m, f32 smoothing_angle)
         {
             const f32 cos_alpha{ XMScalarCos(PI - smoothing_angle * PI / 180.f) };
             const bool is_hard_edge{ XMScalarNearEqual(smoothing_angle, 180.f, EPSILON) };
@@ -91,8 +90,7 @@ namespace Zetta::Tools {
             }
         }
 
-        void
-            process_uvs(Mesh& m)
+        void ProcessUVs(Mesh& m)
         {
             util::vector<Vertex> old_vertices;
             old_vertices.swap(m.vertices);
@@ -134,75 +132,254 @@ namespace Zetta::Tools {
             }
         }
 
-        void
-            pack_vertices_static(Mesh& m)
-        {
+        u64 GetVertexElementSize(Elements::ElementType::Type elements_type) {
+            using namespace Elements;
+            switch (elements_type)
+            {
+            case ElementType::StaticNormal:                 return sizeof(StaticNormal);
+            case ElementType::StaticNormalTexture:          return sizeof(StaticNormalTexture);
+            case ElementType::StaticColor:                  return sizeof(StaticColor);
+            case ElementType::Skeletal:                     return sizeof(Skeletal);
+            case ElementType::SkeletalColor:                return sizeof(SkeletalColor);
+            case ElementType::SkeletalNormal:               return sizeof(SkeletalNormal);
+            case ElementType::SkeletalNormalColor:          return sizeof(SkeletalNormalColor);
+            case ElementType::SkeletalNormalTexture:        return sizeof(SkeletalNormalTexture);
+            case ElementType::SkeletalNormalTextureColor:   return sizeof(SkeletalNormalTextureColor);
+            }
+
+            return 0;
+        }
+
+        void PackVertices(Mesh& m) {
             const u32 num_vertices{ (u32)m.vertices.size() };
             assert(num_vertices);
-            m.packed_vertices_static.reserve(num_vertices);
+
+            m.positions_buffer.resize(sizeof(Math::v3) * num_vertices);
+            Math::v3* const positions_buffer{ (Math::v3* const)m.positions_buffer.data() };
 
             for (u32 i{ 0 }; i < num_vertices; ++i)
             {
-                Vertex& v{ m.vertices[i] };
-                const u8 signs{ (u8)((v.normal.z > 0.f) << 1) };
-                const u16 normal_x{ (u16)PackFloat<16>(v.normal.x, -1.f, 1.f) };
-                const u16 normal_y{ (u16)PackFloat<16>(v.normal.y, -1.f, 1.f) };
-                // TODO: pack tangents in sign and in x/y components
+                positions_buffer[i] = m.vertices[i].position;
+            }
 
-                m.packed_vertices_static
-                    .emplace_back(PackedVertex::VertexStatic
-                        {
-                            v.position, {0, 0, 0}, signs,
-                            {normal_x, normal_y}, {},
-                            v.uv
-                        });
+            struct u16v2 { u16 x, y; };
+            struct u8v3 { u8 x, y, z; };
+
+            util::vector<u8> t_signs(num_vertices);
+            util::vector<u16v2> normals(num_vertices);
+            util::vector<u16v2> tangents(num_vertices);
+            util::vector<u8v3> joint_weights(num_vertices);
+
+            if (m.elements_type & Elements::ElementType::StaticNormal)
+            {
+                // normals only
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    t_signs[i] = (u8)((v.normal.z > 0.f) << 1);
+                    normals[i] = { (u16)PackFloat<16>(v.normal.x, -1.f, 1.f), (u16)PackFloat<16>(v.normal.y, -1.f, 1.f) };
+                }
+
+                if (m.elements_type & Elements::ElementType::StaticNormalTexture)
+                {
+                    // full T-space
+                    for (u32 i{ 0 }; i < num_vertices; ++i)
+                    {
+                        Vertex& v{ m.vertices[i] };
+                        t_signs[i] |= (u8)((v.tangent.w > 0.f) && (v.tangent.z > 0.f));
+                        tangents[i] = { (u16)PackFloat<16>(v.tangent.x, -1.f, 1.f), (u16)PackFloat<16>(v.tangent.y, -1.f, 1.f) };
+                    }
+                }
+            }
+
+            if (m.elements_type & Elements::ElementType::Skeletal)
+            {
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    // pack joint weights (from [0.0, 1.0] to [0..255])
+                    joint_weights[i] = {
+                        (u8)PackUnitFloat<8>(v.joint_weights.x),
+                        (u8)PackUnitFloat<8>(v.joint_weights.y),
+                        (u8)PackUnitFloat<8>(v.joint_weights.z) };
+
+                    // NOTE: w3 will be calculated in shader since joint weights sum to one(1).
+                }
+            }
+
+            m.element_buffer.resize(GetVertexElementSize(m.elements_type) * num_vertices);
+            using namespace Elements;
+
+            switch (m.elements_type)
+            {
+            case ElementType::StaticColor:
+            {
+                StaticColor* const element_buffer{ (StaticColor* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    element_buffer[i] = { {v.red, v.green, v.blue}, {} };
+                }
+            }
+            break;
+            case ElementType::StaticNormal:
+            {
+                StaticNormal* const element_buffer{ (StaticNormal* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    element_buffer[i] = { {v.red, v.green, v.blue}, t_signs[i], {normals[i].x, normals[i].y} };
+                }
+            }
+            break;
+            case ElementType::StaticNormalTexture:
+            {
+                StaticNormalTexture* const element_buffer{ (StaticNormalTexture* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    element_buffer[i] = { {v.red, v.green, v.blue}, t_signs[i],
+                                         {normals[i].x, normals[i].y}, {tangents[i].x, tangents[i].y},
+                                         v.uv };
+                }
+            }
+            break;
+            case ElementType::Skeletal:
+            {
+                Skeletal* const element_buffer{ (Skeletal* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    const u16 indices[4]{ (u16)v.joint_indices.x, (u16)v.joint_indices.y , (u16)v.joint_indices.z , (u16)v.joint_indices.w };
+                    element_buffer[i] = { {joint_weights[i].x, joint_weights[i].y, joint_weights[i].z}, {},
+                                         {indices[0], indices[1], indices[2], indices[3]} };
+                }
+            }
+            break;
+            case ElementType::SkeletalColor:
+            {
+                SkeletalColor* const element_buffer{ (SkeletalColor* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    const u16 indices[4]{ (u16)v.joint_indices.x, (u16)v.joint_indices.y , (u16)v.joint_indices.z , (u16)v.joint_indices.w };
+                    element_buffer[i] = { {joint_weights[i].x, joint_weights[i].y, joint_weights[i].z}, {},
+                                         {indices[0], indices[1], indices[2], indices[3]},
+                                         {v.red, v.green, v.blue}, {} };
+                }
+            }
+            break;
+            case ElementType::SkeletalNormal:
+            {
+                SkeletalNormal* const element_buffer{ (SkeletalNormal* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    const u16 indices[4]{ (u16)v.joint_indices.x, (u16)v.joint_indices.y , (u16)v.joint_indices.z , (u16)v.joint_indices.w };
+                    element_buffer[i] = { {joint_weights[i].x, joint_weights[i].y, joint_weights[i].z}, t_signs[i],
+                                         {indices[0], indices[1], indices[2], indices[3]},
+                                         {normals[i].x, normals[i].y} };
+                }
+            }
+            break;
+            case ElementType::SkeletalNormalColor:
+            {
+                SkeletalNormalColor* const element_buffer{ (SkeletalNormalColor* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    const u16 indices[4]{ (u16)v.joint_indices.x, (u16)v.joint_indices.y , (u16)v.joint_indices.z , (u16)v.joint_indices.w };
+                    element_buffer[i] = { {joint_weights[i].x, joint_weights[i].y, joint_weights[i].z}, t_signs[i],
+                                         {indices[0], indices[1], indices[2], indices[3]},
+                                         {normals[i].x, normals[i].y}, {v.red, v.green, v.blue}, {} };
+                }
+            }
+            break;
+            case ElementType::SkeletalNormalTexture:
+            {
+                SkeletalNormalTexture* const element_buffer{ (SkeletalNormalTexture* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    const u16 indices[4]{ (u16)v.joint_indices.x, (u16)v.joint_indices.y , (u16)v.joint_indices.z , (u16)v.joint_indices.w };
+                    element_buffer[i] = { {joint_weights[i].x, joint_weights[i].y, joint_weights[i].z}, t_signs[i],
+                                         {indices[0], indices[1], indices[2], indices[3]},
+                                         {normals[i].x, normals[i].y}, {tangents[i].x, tangents[i].y}, v.uv };
+                }
+            }
+            break;
+            case ElementType::SkeletalNormalTextureColor:
+            {
+                SkeletalNormalTextureColor* const element_buffer{ (SkeletalNormalTextureColor* const)m.element_buffer.data() };
+                for (u32 i{ 0 }; i < num_vertices; ++i)
+                {
+                    Vertex& v{ m.vertices[i] };
+                    const u16 indices[4]{ (u16)v.joint_indices.x, (u16)v.joint_indices.y , (u16)v.joint_indices.z , (u16)v.joint_indices.w };
+                    element_buffer[i] = { {joint_weights[i].x, joint_weights[i].y, joint_weights[i].z}, t_signs[i],
+                                         {indices[0], indices[1], indices[2], indices[3]},
+                                         {normals[i].x, normals[i].y}, {tangents[i].x, tangents[i].y}, v.uv,
+                                         {v.red, v.green, v.blue}, {} };
+                }
+            }
+            break;
             }
         }
 
-        void
-            process_vertices(Mesh& m, const GeometryImportSettings& settings)
+        void DetermineElementType(Mesh& m) {
+            using namespace Elements;
+            if (m.normals.size()) {
+                if (m.uv_sets.size() && m.uv_sets[0].size())
+                    m.elements_type = ElementType::StaticNormalTexture;
+                else m.elements_type = ElementType::StaticNormal;
+            }
+            else if (m.colors.size()) m.elements_type = ElementType::StaticColor;
+            
+            // TODO: Implement Skeletal meshes when the data is available.
+        }
+
+        void ProcessVertices(Mesh& m, const GeometryImportSettings& settings)
         {
             assert((m.raw_indices.size() % 3) == 0);
             if (settings.calculate_normals || m.normals.empty())
-            {
-                recalculate_normals(m);
-            }
-
-            process_normals(m, settings.smoothing_angle);
+                RecalculateNormals(m);
+            
+            ProcessNormals(m, settings.smoothing_angle);
 
             if (!m.uv_sets.empty())
-            {
-                process_uvs(m);
-            }
-
-            pack_vertices_static(m);
+                ProcessUVs(m);
+            
+            DetermineElementType(m);
+            PackVertices(m);
         }
 
-        u64
-            get_Mesh_size(const Mesh& m)
+        u64 GetMeshSize(const Mesh& m)
         {
             const u64 num_vertices{ m.vertices.size() };
-            const u64 vertex_buffer_size{ sizeof(PackedVertex::VertexStatic) * num_vertices };
+            const u64 positions_buffer_size{ m.positions_buffer.size() };
+            assert(positions_buffer_size == sizeof(Math::v3) * num_vertices);
+            const u64 element_buffer_size{ m.element_buffer.size() };
+            assert(element_buffer_size == GetVertexElementSize(m.elements_type) * num_vertices);
             const u64 index_size{ (num_vertices < (1 << 16)) ? sizeof(u16) : sizeof(u32) };
             const u64 index_buffer_size{ index_size * m.indices.size() };
             constexpr u64 su32{ sizeof(u32) };
             const u64 size{
                 su32 + m.name.size() + // Mesh name length and room for Mesh name string
                 su32 + // lod id
-                su32 + // vertex size
+                su32 + // vertex element size (vertex size excluding position element)
+                su32 + // element type enumeration size
                 su32 + // number of vertices
                 su32 + // index size (16 bit or 32 bit)
                 su32 + // number of indices
                 sizeof(f32) + // LOD threshold
-                vertex_buffer_size + // room for vertices
+                positions_buffer_size + // room for vertex positions
+                element_buffer_size + // room for vertex Elements
                 index_buffer_size // room for indices
             };
 
             return size;
         }
 
-        u64
-            get_scene_size(const Scene& scene)
+        u64 GetSceneSize(const Scene& scene)
         {
             constexpr u64 su32{ sizeof(u32) };
             u64 size
@@ -221,9 +398,8 @@ namespace Zetta::Tools {
                 };
 
                 for (auto& m : lod.meshes)
-                {
-                    lod_size += get_Mesh_size(m);
-                }
+                    lod_size += GetMeshSize(m);
+                
 
                 size += lod_size;
             }
@@ -231,51 +407,47 @@ namespace Zetta::Tools {
             return size;
         }
 
-        void
-            pack_Mesh_data(const Mesh& m, u8* const buffer, u64& at)
+        void PackMeshData(const Mesh& m, util::BlobStreamWriter& blob)
         {
-            constexpr u64 su32{ sizeof(u32) };
-            u32 s{ 0 };
-            // Mesh name
-            s = (u32)m.name.size();
-            memcpy(&buffer[at], &s, su32); at += su32;
-            memcpy(&buffer[at], m.name.c_str(), s); at += s;
+            // mesh name
+            blob.write((u32)m.name.size());
+            blob.write(m.name.c_str(), m.name.size());
             // lod id
-            s = m.lod_id;
-            memcpy(&buffer[at], &s, su32); at += su32;
-            // vertex size
-            constexpr u32 vertex_size{ sizeof(PackedVertex::VertexStatic) };
-            s = vertex_size;
-            memcpy(&buffer[at], &s, su32); at += su32;
+            blob.write(m.lod_id);
+            // vertex element size
+            const u32 elements_size{ (u32)GetVertexElementSize(m.elements_type) };
+            blob.write(elements_size);
+            // Elements type enumeration
+            blob.write((u32)m.elements_type);
             // number of vertices
             const u32 num_vertices{ (u32)m.vertices.size() };
-            s = num_vertices;
-            memcpy(&buffer[at], &s, su32); at += su32;
+            blob.write(num_vertices);
             // index size (16 bit or 32 bit)
             const u32 index_size{ (num_vertices < (1 << 16)) ? sizeof(u16) : sizeof(u32) };
-            s = index_size;
-            memcpy(&buffer[at], &s, su32); at += su32;
+            blob.write(index_size);
             // number of indices
             const u32 num_indices{ (u32)m.indices.size() };
-            s = num_indices;
-            memcpy(&buffer[at], &s, su32); at += su32;
+            blob.write(num_indices);
             // LOD threshold
-            memcpy(&buffer[at], &m.lod_threshold, sizeof(f32)); at += sizeof(f32);
-            // vertex data
-            s = vertex_size * num_vertices;
-            memcpy(&buffer[at], m.packed_vertices_static.data(), s); at += s;
+            blob.write(m.lod_threshold);
+            // position buffer
+            assert(m.positions_buffer.size() == sizeof(Math::v3) * num_vertices);
+            blob.write(m.positions_buffer.data(), m.positions_buffer.size());
+            // element buffer
+            assert(m.element_buffer.size() == elements_size * num_vertices);
+            blob.write(m.element_buffer.data(), m.element_buffer.size());
             // index data
-            s = index_size * num_indices;
-            void* data{ (void*)m.indices.data() };
+            const u32 index_buffer_size{ index_size * num_indices };
+            const u8* data{ (const u8*)m.indices.data() };
             util::vector<u16> indices;
 
             if (index_size == sizeof(u16))
             {
                 indices.resize(num_indices);
                 for (u32 i{ 0 }; i < num_indices; ++i) indices[i] = (u16)m.indices[i];
-                data = (void*)indices.data();
+                data = (const u8*)indices.data();
             }
-            memcpy(&buffer[at], data, s); at += s;
+            blob.write(data, index_buffer_size);
         }
 
         bool SplitMeshesByMaterial(u32 material_idx, const Mesh& m, Mesh& submesh) {
@@ -336,54 +508,43 @@ namespace Zetta::Tools {
 
     } // anonymous namespace
 
-    void
-        ProcessScene(Scene& scene, const GeometryImportSettings& settings)
+    void ProcessScene(Scene& scene, const GeometryImportSettings& settings)
     {
         SplitMeshesByMaterial(scene);
 
         for (auto& lod : scene.lod_groups)
             for (auto& m : lod.meshes)
-                process_vertices(m, settings);
+                ProcessVertices(m, settings);
     }
 
-    void
-        PackData(const Scene& scene, SceneData& data)
+    void PackData(const Scene& scene, SceneData& data)
     {
-        constexpr u64 su32{ sizeof(u32) };
-        const u64 scene_size{ get_scene_size(scene) };
+        const u64 scene_size{ GetSceneSize(scene) };
         data.size = (u32)scene_size;
         data.data = (u8*)CoTaskMemAlloc(scene_size);
         assert(data.data);
 
-        u8* const buffer{ data.data };
-        u64 at{ 0 };
-        u32 s{ 0 };
+        util::BlobStreamWriter blob{ data.data, data.size };
 
         // scene name
-        s = (u32)scene.name.size();
-        memcpy(&buffer[at], &s, su32); at += su32;
-        memcpy(&buffer[at], scene.name.c_str(), s); at += s;
+        blob.write((u32)scene.name.size());
+        blob.write(scene.name.c_str(), scene.name.size());
         // number of LODs
-        s = (u32)scene.lod_groups.size();
-        memcpy(&buffer[at], &s, su32); at += su32;
+        blob.write((u32)scene.lod_groups.size());
 
         for (auto& lod : scene.lod_groups)
         {
             // LOD name
-            s = (u32)lod.name.size();
-            memcpy(&buffer[at], &s, su32); at += su32;
-            memcpy(&buffer[at], lod.name.c_str(), s); at += s;
+            blob.write((u32)lod.name.size());
+            blob.write(lod.name.c_str(), lod.name.size());
             // number of Meshes in this LOD
-            s = (u32)lod.meshes.size();
-            memcpy(&buffer[at], &s, su32); at += su32;
+            blob.write((u32)lod.meshes.size());
 
             for (auto& m : lod.meshes)
-            {
-                pack_Mesh_data(m, buffer, at);
-            }
+                PackMeshData(m, blob);
         }
 
-        assert(scene_size == at);
+        assert(scene_size == blob.Offset());
     }
 
 }

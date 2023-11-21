@@ -16,6 +16,18 @@ namespace Zetta::Graphics {
 			void(*Render)(SurfaceID);
 		} Surface;
 
+		struct {
+			Camera(*Create)(CameraInitInfo);
+			void(*Remove)(CameraID);
+			void(*SetParameter)(CameraID, CameraParameter::Parameter, const void* const, u32);
+			void(*GetParameter)(CameraID, CameraParameter::Parameter, void* const, u32);
+		} Camera;
+
+		struct {
+			ID::ID_Type(*AddSubmesh)(const u8*&);
+			void(*RemoveSubmesh)(ID::ID_Type);
+		} Resources;
+
 		GraphicsPlatform platform = (GraphicsPlatform)-1;
 	};
 }

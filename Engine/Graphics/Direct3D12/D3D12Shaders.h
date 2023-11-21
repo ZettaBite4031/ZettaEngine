@@ -2,21 +2,6 @@
 #include "D3D12CommonHeaders.h"
 
 namespace Zetta::Graphics::D3D12::Shaders {
-	struct ShaderType {
-		enum type : u32 {
-			vertex = 0,
-			hull,
-			domain,
-			geometry,
-			pixel,
-			compute,
-			amplification,
-			mesh,
-
-			count
-		};
-	};
-
 	struct EngineShader {
 		enum id : u32 {
 			FullscreenTriangleVS = 0,

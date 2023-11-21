@@ -76,8 +76,6 @@ namespace Zetta::Graphics::D3D12::GPass {
 			NAME_D3D12_OBJECT(gpass_depth_buffer.Resource(), L"GPass Depth Buffer");
 
 			return gpass_main_buffer.Resource() && gpass_depth_buffer.Resource();
-
-			return true;
 		}
 	}
 
@@ -168,6 +166,8 @@ namespace Zetta::Graphics::D3D12::GPass {
 	}
 
 	void AddDepthPrepassTransitions(D3DX::D3D12ResourceBarrier& barriers) {
+		barriers.Add(gpass_main_buffer.Resource(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+			D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY);
 		barriers.Add(gpass_depth_buffer.Resource(),
 			D3D12_RESOURCE_STATE_DEPTH_READ | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			D3D12_RESOURCE_STATE_DEPTH_WRITE);
@@ -176,7 +176,7 @@ namespace Zetta::Graphics::D3D12::GPass {
 	void AddGPassTransitions(D3DX::D3D12ResourceBarrier& barriers) {
 		barriers.Add(gpass_main_buffer.Resource(),
 			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-			D3D12_RESOURCE_STATE_RENDER_TARGET);
+			D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_BARRIER_FLAG_END_ONLY);
 		barriers.Add(gpass_depth_buffer.Resource(),
 			D3D12_RESOURCE_STATE_DEPTH_WRITE,
 			D3D12_RESOURCE_STATE_DEPTH_READ | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

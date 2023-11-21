@@ -10,6 +10,13 @@ namespace Zetta::Graphics::D3D12::D3DX {
 					0,									// CreationNodeMask
 					0									// VisibleNodeMask
 		};
+		D3D12_HEAP_PROPERTIES upload_heap{
+					D3D12_HEAP_TYPE_UPLOAD,				// Type;
+					D3D12_CPU_PAGE_PROPERTY_UNKNOWN,	// CPUPageProperty
+					D3D12_MEMORY_POOL_UNKNOWN,			// MemoryPoolPreference
+					0,									// CreationNodeMask
+					0									// VisibleNodeMask
+		};
 	} heap_properties;
 
 	constexpr struct {
@@ -259,4 +266,9 @@ namespace Zetta::Graphics::D3D12::D3DX {
 
 	ID3D12PipelineState* CreatePipelineState(D3D12_PIPELINE_STATE_STREAM_DESC desc);
 	ID3D12PipelineState* CreatePipelineState(void* stream, u64 size);
+
+	ID3D12Resource* CreateBuffer(const void* data, u32 size, bool is_cpu_accessible = false,
+								D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON,
+								D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE,
+								ID3D12Heap* heap = nullptr, u64 heap_offset = 0);
 }

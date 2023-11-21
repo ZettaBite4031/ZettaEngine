@@ -59,65 +59,95 @@ namespace Zetta::Tools {
 			FbxNode* node{ root->GetChild(i) };
 			if (!node) continue;
 
-			if (node->GetMesh()) {
-				LODGroup lod{};
-				GetMesh(node, lod.meshes);
-				if (lod.meshes.size()) {
-					lod.name = lod.meshes[0].name;
-					_scene->lod_groups.emplace_back(lod);
-				}
+			LODGroup lod{};
+			GetMeshes(node, lod.meshes, 0, -1.f);
+			if (lod.meshes.size()) {
+				lod.name = lod.meshes[0].name;
+				_scene->lod_groups.emplace_back(lod);
 			}
-			else if (node->GetLodGroup()) GetLODGroup(node);
-			else GetScene(node);
 		}
 	}
 
-	void FBXContext::GetMesh(FbxNode* node, util::vector<Mesh>& meshes) {
-		assert(node);
+	void FBXContext::GetMeshes(FbxNode* node, util::vector<Mesh>& meshes, u32 lod_id, f32 lod_threshold) {
+		assert(node && lod_id != u32_invalid_id);
+		bool is_lod_group{ false };
 
-		if (FbxMesh * fbx_mesh{ node->GetMesh() }) {
+		if (const s32 num_attribtues{ node->GetNodeAttributeCount() }) {
+			for (s32 i{ 0 }; i < num_attribtues; i++) {
+				FbxNodeAttribute* attribute{ node->GetNodeAttributeByIndex(i) };
+				const FbxNodeAttribute::EType attribute_type{ attribute->GetAttributeType() };
+				if (attribute_type == FbxNodeAttribute::eMesh)
+					GetMesh(attribute, meshes, lod_id, lod_threshold);
+				else if (attribute_type == FbxNodeAttribute::eLODGroup) {
+					GetLODGroup(attribute);
+					is_lod_group = true;
+				}
+			}
+		}
+
+		if (!is_lod_group) {
+			if (const s32 num_children{ node->GetChildCount() }) {
+				for (s32 i{ 0 }; i < num_children; i++)
+					GetMeshes(node->GetChild(i), meshes, lod_id, lod_threshold);
+			}
+		}
+	}
+
+	void FBXContext::GetMesh(FbxNodeAttribute* attribute, util::vector<Mesh>& meshes, u32 lod_id, f32 lod_threshold) {
+		assert(attribute);
+
+		if (FbxMesh * fbx_mesh{ (FbxMesh*)attribute }) {
 			if (fbx_mesh->RemoveBadPolygons() < 0) return;
 
 			FbxGeometryConverter gc{ _fbx_manager };
-			fbx_mesh = static_cast<FbxMesh*>(gc.Triangulate(fbx_mesh, true));
+			fbx_mesh = (FbxMesh*)gc.Triangulate(fbx_mesh, true);
 			if (!fbx_mesh || fbx_mesh->RemoveBadPolygons() < 0) return;
 
+			FbxNode* const node{ fbx_mesh->GetNode() };
+
 			Mesh m;
-			m.lod_id = (u32)meshes.size();
-			m.lod_threshold = -1.f;
+			m.lod_id = lod_id;
+			m.lod_threshold = lod_threshold;
 			m.name = (node->GetName()[0] != '\0') ? node->GetName() : fbx_mesh->GetName();
 
 			if (GetMeshData(fbx_mesh, m)) meshes.emplace_back(m);
 		}
-
-		GetScene(node);
 	}
 
-	void FBXContext::GetLODGroup(FbxNode* node) {
-		assert(node);
+	void FBXContext::GetLODGroup(FbxNodeAttribute* attribute) {
+		assert(attribute);
 
-		if (FbxLODGroup* lod_grp{ node->GetLodGroup() }) {
-			LODGroup lod{};
-			lod.name = (node->GetName()[0] != '\0') ? node->GetName() : lod_grp->GetName();
-			const s32 num_lods{ lod_grp->GetNumThresholds() };
-			const s32 num_nodes{ node->GetChildCount() };
-			assert(num_lods > 0 && num_nodes > 0);
+		FbxLODGroup* lod_grp{ (FbxLODGroup*)attribute };
+		FbxNode* const node{ lod_grp->GetNode() };
+		LODGroup lod{};
+		lod.name = (node->GetName()[0] != '\0') ? node->GetName() : lod_grp->GetName();
+		const s32 num_nodes{ node->GetChildCount() };
+		assert(num_nodes > 0 && lod_grp->GetNumThresholds() == (num_nodes -1));
 
-			for (s32 i{ 0 }; i < num_nodes; i++) {
-				GetMesh(node->GetChild(i), lod.meshes);
-				if (lod.meshes.size() > 1 && lod.meshes.size() <= num_lods + 1 && lod.meshes.back().lod_threshold < 0.f) {
-					FbxDistance threshold;
-					lod_grp->GetThreshold((u32)lod.meshes.size() - 2, threshold);
-					lod.meshes.back().lod_threshold = threshold.value() * _scene_scale;
-				}
+		for (s32 i{ 0 }; i < num_nodes; i++) {
+			f32 lod_threshold{ -1.f };
+			if (i > 0) {
+				FbxDistance threshold;
+				lod_grp->GetThreshold(i-1, threshold);
+				lod_threshold = threshold.value() * _scene_scale;
 			}
-			
-			if (lod.meshes.size()) _scene->lod_groups.emplace_back(lod);
+			GetMeshes(node->GetChild(i), lod.meshes, (u32)lod.meshes.size(), lod_threshold);
 		}
+		if (lod.meshes.size()) _scene->lod_groups.emplace_back(lod);
 	}
 
 	bool FBXContext::GetMeshData(FbxMesh* fbx_mesh, Mesh& m) {
 		assert(fbx_mesh);
+
+		FbxNode* const node{ fbx_mesh->GetNode() };
+		FbxAMatrix geometricTransform;
+
+		geometricTransform.SetT(node->GetGeometricTranslation(FbxNode::eSourcePivot));
+		geometricTransform.SetR(node->GetGeometricRotation(FbxNode::eSourcePivot));
+		geometricTransform.SetS(node->GetGeometricScaling(FbxNode::eSourcePivot));
+
+		FbxAMatrix transform{ node->EvaluateGlobalTransform() * geometricTransform };
+		FbxAMatrix inverse_transpose{ transform.Inverse().Transpose() };
 
 		const s32 num_polys{ fbx_mesh->GetPolygonCount() };
 		if (num_polys <= 0) return false;
@@ -138,7 +168,7 @@ namespace Zetta::Tools {
 
 			if (vertex_ref[v_idx] != u32_invalid_id) m.raw_indices[i] = vertex_ref[v_idx];
 			else {
-				FbxVector4 v = vertices[v_idx] * _scene_scale;
+				FbxVector4 v = transform.MultT(vertices[v_idx]) * _scene_scale;
 				m.raw_indices[i] = (u32)m.positions.size();
 				vertex_ref[v_idx] = m.raw_indices[i];
 				m.positions.emplace_back((f32)v[0], (f32)v[1], (f32)v[2]);
@@ -166,8 +196,11 @@ namespace Zetta::Tools {
 			FbxArray<FbxVector4> normals;
 			if (fbx_mesh->GenerateNormals() && fbx_mesh->GetPolygonVertexNormals(normals) && normals.Size() > 0) {
 				const s32 num_normals{ normals.Size() };
-				for (s32 i{ 0 }; i < num_normals; i++)
-					m.normals.emplace_back((f32)normals[i][0], (f32)normals[i][1], (f32)normals[i][2]);
+				for (s32 i{ 0 }; i < num_normals; i++) {
+					FbxVector4 n{ inverse_transpose.MultT(normals[i]) };
+					n.Normalize();
+					m.normals.emplace_back((f32)n[0], (f32)n[1], (f32)n[2]);
+				}
 			}
 			else {
 				_scene_data->settings.calculate_normals = true;
@@ -180,7 +213,11 @@ namespace Zetta::Tools {
 				const s32 num_tangent{ tangents->GetCount() };
 				for (s32 i{ 0 }; i < num_tangent; i++) {
 					FbxVector4 t{ tangents->GetAt(i) };
-					m.tangents.emplace_back((f32)t[0], (f32)t[1], (f32)t[2], (f32)t[3]);
+					const f32 handedness{ (f32)t[3] };
+					t[3] = 0.0f;
+					t = transform.MultT(t);
+					t.Normalize();
+					m.tangents.emplace_back((f32)t[0], (f32)t[1], (f32)t[2], handedness);
 				}
 			}
 			else {
@@ -213,10 +250,7 @@ namespace Zetta::Tools {
 			std::lock_guard lock{ fbx_mutex };
 			FBXContext fbx_context{ file, &scene, data };
 			if (fbx_context.IsValid()) fbx_context.GetScene();
-			else {
-
-				return;
-			}
+			else return;
 		}
 
 		ProcessScene(scene, data->settings);

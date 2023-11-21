@@ -37,4 +37,20 @@ namespace Zetta::Math {
 		assert(min < max);
 		return UnpackUnitFloat<bits>(i) * (max - min) + min;
 	}
+
+	template<u64 alignment>
+	constexpr u64 AlignSizeUp(u64 size) {
+		static_assert(alignment, "Alignment must be non-zero");
+		constexpr u32 mask{ alignment - 1 };
+		static_assert(!(alignment & mask), "Alignment should be a power of two");
+		return ((size + mask) & ~mask);
+	}
+
+	template<u64 alignment>
+	constexpr u64 AlignSizeDown(u64 size) {
+		static_assert(alignment, "Alignment must be non-zero");
+		constexpr u32 mask{ alignment - 1 };
+		static_assert(!(alignment & mask), "Alignment should be a power of two");
+		return (size & ~mask);
+	}
 }

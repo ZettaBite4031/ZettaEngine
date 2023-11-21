@@ -1,5 +1,5 @@
 #pragma once
-#include "../Common/CommonHeaders.h"
+#include "Common/CommonHeaders.h"
 
 namespace Zetta::Platform {
 	DEFINE_TYPED_ID(WindowID);

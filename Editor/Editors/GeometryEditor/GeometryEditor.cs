@@ -17,6 +17,35 @@ namespace Editor.Editors
 {
 	class MeshRendererVertexData : ViewModelBase
 	{
+		private bool _IsHighlighted;
+		public bool IsHighlighted
+		{
+			get => _IsHighlighted;
+			set
+			{
+				if (_IsHighlighted != value)
+				{
+					_IsHighlighted = value;
+					OnPropertyChanged(nameof(IsHighlighted));
+					OnPropertyChanged(nameof(Diffuse));
+				}
+			}
+		}
+
+		private bool _IsIsolated;
+		public bool IsIsolated
+		{
+			get => _IsIsolated;
+			set
+			{
+				if (_IsIsolated != value)
+				{
+					_IsIsolated = value;
+					OnPropertyChanged(nameof(IsIsolated));
+				}
+			}
+		}
+
 		private Brush _Specular = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ff111111"));
 		public Brush Specular
 		{
@@ -33,7 +62,7 @@ namespace Editor.Editors
 		private Brush _Diffuse = Brushes.White;
 		public Brush Diffuse
 		{
-			get => _Diffuse;
+			get => _IsHighlighted ? Brushes.Orange : _Diffuse;
 			set
 			{
 				if (_Diffuse != value)
@@ -43,7 +72,8 @@ namespace Editor.Editors
 				}
 			}
 		}
-		public Point3DCollection Positions { get; } = new Point3DCollection();
+        public string Name { get; set; }
+        public Point3DCollection Positions { get; } = new Point3DCollection();
 		public Vector3DCollection Normals { get; } = new Vector3DCollection();
 		public PointCollection UVs { get; } = new PointCollection();
 		public Int32Collection Indices { get; } = new Int32Collection();
@@ -161,7 +191,6 @@ namespace Editor.Editors
 		{
 			Debug.Assert(lod?.Meshes.Any() == true);
 			// Calculate vertex size minus the position and normal vectors
-			var offset = lod.Meshes[0].VertexSize - 3 * sizeof(float) - sizeof(int) - 2 * sizeof(short);
 
 			double minX, minY, minZ; minX = minY = minZ = double.MaxValue;
 			double maxX, maxY, maxZ; maxX = maxY = maxZ = double.MinValue;
@@ -170,33 +199,50 @@ namespace Editor.Editors
 			var intervals = 2.0f / ((1 << 16) - 1);
 			foreach (var mesh in lod.Meshes)
 			{
-				var vertexData = new MeshRendererVertexData();
+				var vertexData = new MeshRendererVertexData() { Name = mesh.Name };
 
-				using (var reader = new BinaryReader(new MemoryStream(mesh.Vertices))) 
-					for(int i = 0; i < mesh.VertexCount; i++)
+				using (var reader = new BinaryReader(new MemoryStream(mesh.Positions)))
+					for (int i = 0; i < mesh.VertexCount; i++)
 					{
 						var posX = reader.ReadSingle();
 						var posY = reader.ReadSingle();
 						var posZ = reader.ReadSingle();
-						var signs = (reader.ReadUInt32() >> 24) & 0x000000ff;
 						vertexData.Positions.Add(new Point3D(posX, posY, posZ));
 
 						minX = Math.Min(minX, posX); maxX = Math.Max(maxX, posX);
 						minY = Math.Min(minY, posY); maxY = Math.Max(maxY, posY);
 						minZ = Math.Min(minZ, posZ); maxZ = Math.Max(maxZ, posZ);
+					}
+					
+				if (mesh.ElementsType.HasFlag(ElementType.Normals)) {
+					var tSpaceOffset = 0;
+					if (mesh.ElementsType.HasFlag(ElementType.Joints)) tSpaceOffset = sizeof(short) * 4;
+					using (var reader = new BinaryReader(new MemoryStream(mesh.Elements)))
+						for (int i = 0; i < mesh.VertexCount; i++)
+						{
+                            var signs = (reader.ReadUInt32() >> 24) & 0x000000ff;
+							reader.BaseStream.Position += tSpaceOffset;
+                            var nX = reader.ReadUInt16() * intervals - 1.0f;
+							var nY = reader.ReadUInt16() * intervals - 1.0f;
+							var nZ = Math.Sqrt(Math.Clamp(1f - (nX * nX + nY * nY), 0f, 1f)) * ((signs & 0x2) - 1f);
+							var normal = new Vector3D(nX, nY, nZ);
+							normal.Normalize();
+							vertexData.Normals.Add(normal);
+							avgNormal += normal;
 
-						var nX = reader.ReadUInt16() * intervals - 1.0f;
-						var nY = reader.ReadUInt16() * intervals - 1.0f;
-						var nZ = Math.Sqrt(Math.Clamp(1f - (nX * nX + nY * nY), 0f, 1f)) * ((signs & 0x2) - 1f);
-						var normal = new Vector3D(nX, nY, nZ);
-						normal.Normalize();
-						vertexData.Normals.Add(normal);
-						avgNormal += normal;
+							if (mesh.ElementsType.HasFlag(ElementType.TSpace))
+							{
+								reader.BaseStream.Position += sizeof(short) * 2;
+								var u = reader.ReadSingle();
+								var v = reader.ReadSingle();
+								vertexData.UVs.Add(new Point(u, v));
+							}
 
-						reader.BaseStream.Position += (offset - sizeof(float) * 2);
-						var u = reader.ReadSingle();
-						var v = reader.ReadSingle();
-						vertexData.UVs.Add(new Point(u, v));
+							if (mesh.ElementsType.HasFlag(ElementType.Joints) && mesh.ElementsType.HasFlag(ElementType.Colors))
+							{
+								reader.BaseStream.Position += 4; // skip colors
+							}
+						}
 					}
 
 				using (var reader = new BinaryReader(new MemoryStream(mesh.Indices)))
@@ -216,6 +262,9 @@ namespace Editor.Editors
 			{
 				CameraTarget = old.CameraTarget;
 				CameraPosition = old.CameraPosition;
+
+				foreach (var m in old.Meshes) m.IsHighlighted = false;
+				foreach (var m in old.Meshes) m.Diffuse = old.Meshes.First().Diffuse;
 			}
 			else
 			{

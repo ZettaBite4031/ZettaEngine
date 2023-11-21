@@ -145,6 +145,7 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RendererTest.cpp" />
+    <ClCompile Include="RenderItem.cpp" />
     <ClCompile Include="ShaderCompilation.cpp" />
   </ItemGroup>
   <ItemGroup>
