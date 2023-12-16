@@ -7,11 +7,6 @@ namespace Zetta::Content {
 		class GeometryHierarchyStream {
 		public:
 			DISABLE_COPY_AND_MOVE(GeometryHierarchyStream);
-			struct LODOffset {
-				u16 offset;
-				u16 count;
-			};
-
 			GeometryHierarchyStream(u8* const buffer, u32 lods = u32_invalid_id)
 				: _buffer{ buffer } {
 				assert(buffer && lods);
@@ -31,6 +26,9 @@ namespace Zetta::Content {
 
 			u32 LODFromThreshold(f32 threshold) {
 				assert(threshold > 0);
+
+				if (_lod_count == 1) return 0;
+
 				for (u32 i{ _lod_count - 1 }; i > 0; i--)
 					if (_thresholds[i] <= threshold) return i;
 
@@ -50,12 +48,23 @@ namespace Zetta::Content {
 			ID::ID_Type* _gpu_ids;
 			u32 _lod_count;
 		};
+		
+		// NOTE: Required for maintained compatibility with STL vector.
+		struct NoexceptMap {
+			std::unordered_map<u32, std::unique_ptr<u8[]>> map;
+
+			NoexceptMap() = default;
+			NoexceptMap(const NoexceptMap&) = default;
+			NoexceptMap(NoexceptMap&&) noexcept = default;
+			NoexceptMap& operator=(const NoexceptMap&) = default;
+			NoexceptMap& operator=(NoexceptMap&&) noexcept = default;
+		};
 
 		constexpr uintptr_t single_mesh_marker{ (uintptr_t)0x01 };
 		util::FreeList<u8*> geometry_hierarchies;
 		std::mutex geometry_mutex;
 
-		util::FreeList<std::unique_ptr<u8[]>> shaders;
+		util::FreeList<NoexceptMap> shader_groups;
 		std::mutex shader_mutex;
 
 		u32 GetGeometryHierarchyBufferSize(const void* const data) {
@@ -65,7 +74,7 @@ namespace Zetta::Content {
 			assert(lod_count);
 			constexpr u32 su32{ sizeof(u32) };
 			// add the size of lod_count, thresholds, and lod_offsets to the size of the hierarchy
-			u32 size{ su32 + (sizeof(f32) + sizeof(GeometryHierarchyStream::LODOffset)) * lod_count };
+			u32 size{ su32 + (sizeof(f32) + sizeof(LODOffset)) * lod_count };
 
 			for (u32 i{ 0 }; i < lod_count; i++) {
 				// skip the threshold
@@ -211,6 +220,23 @@ namespace Zetta::Content {
 
 			geometry_hierarchies.Remove(id);
 		}
+
+		// NOTE: Expects data to contain
+		// struct {
+		//     MaterialType::Type type,
+		//     u32 texture_count,
+		//     ID::ID_Type shader_ids[ShaderType::count],
+		//     ID::ID_Type* texture_ids
+		// } MaterialInitInfo;
+		//
+		ID::ID_Type CreateMaterialResource(const void* const data) {
+			assert(data);
+			return Graphics::AddMaterial(*(const Graphics::MaterialInitInfo* const)data);
+		}
+
+		void DestroyMaterialResource(ID::ID_Type id) {
+			Graphics::RemoveMaterial(id);
+		}
 	}
 
 	ID::ID_Type CreateResource(const void* const data, AssetType::Type type) {
@@ -222,7 +248,7 @@ namespace Zetta::Content {
 		case AssetType::Unknown: break;
 		case AssetType::Animation: break;
 		case AssetType::Audio: break;
-		case AssetType::Material: break;
+		case AssetType::Material: id = CreateMaterialResource(data); break;
 		case AssetType::Mesh: id = CreateGeometryResource(data); break;
 		case AssetType::Skeleton: break;
 		case AssetType::Texture: break;
@@ -239,7 +265,7 @@ namespace Zetta::Content {
 		case AssetType::Unknown: break;
 		case AssetType::Animation: break;
 		case AssetType::Audio: break;
-		case AssetType::Material: break;
+		case AssetType::Material: DestroyMaterialResource(id);  break;
 		case AssetType::Mesh: DestroyGeometryResource(id); break;
 		case AssetType::Skeleton: break;
 		case AssetType::Texture: break;
@@ -249,24 +275,79 @@ namespace Zetta::Content {
 		}
 	}
 
-	ID::ID_Type AddShader(const u8* data) {
-		const pCompiledShader pShader{ (const pCompiledShader)data };
-		const u64 size{ sizeof(u64) + CompiledShader::hash_length + pShader->ByteCodeSize() };
-		std::unique_ptr<u8[]> shader{ std::make_unique<u8[]>(size) };
-		memcpy(shader.get(), data, size);
+	ID::ID_Type AddShaderGroup(const u8** shaders, u32 shader_count, const u32* const keys) {
+		assert(shaders && shader_count && keys);
+		NoexceptMap group;
+		for (u32 i{ 0 }; i < shader_count; i++) {
+			assert(shaders[i]);
+			const pCompiledShader shader_ptr{ (const pCompiledShader)shaders[i] };
+			const u64 size{ shader_ptr->Size() };
+			std::unique_ptr<u8[]> shader{ std::make_unique<u8[]>(size) };
+			memcpy(shader.get(), shaders[i], size);
+			group.map[keys[i]] = std::move(shader);
+		}
 		std::lock_guard lock{ shader_mutex };
-		return shaders.Add(std::move(shader));
+		return shader_groups.Add(std::move(group));
 	}
 
-	void RemoveShader(ID::ID_Type id) {
+	void RemoveShaderGroup(ID::ID_Type id) {
 		assert(ID::IsValid(id));
 		std::lock_guard lock{ shader_mutex };
-		shaders.Remove(id);
+
+		shader_groups[id].map.clear();
+		shader_groups.Remove(id);
 	}
 
-	pCompiledShader GetShader(ID::ID_Type id) {
+	pCompiledShader GetShader(ID::ID_Type id, u32 shader_key) {
 		assert(ID::IsValid(id));
 		std::lock_guard lock{ shader_mutex };
-		return (const pCompiledShader)(shaders[id].get());
+
+		for (const auto& [key, value] : shader_groups[id].map)
+			if (key == shader_key)
+				return (const pCompiledShader)value.get();
+
+		assert(false); // Code path should never reach here
+		return nullptr;
+	}
+
+	void GetSubmeshGPU_IDs(ID::ID_Type geometry_content_id, u32 id_count, ID::ID_Type* const gpu_ids) {
+		std::lock_guard lock{ geometry_mutex };
+		u8* const ptr{ geometry_hierarchies[geometry_content_id] };
+		if ((uintptr_t)ptr & single_mesh_marker) {
+			assert(id_count == 1);
+			*gpu_ids = GPU_IDFromFakePointer(ptr);
+		}
+		else {
+			GeometryHierarchyStream stream{ ptr };
+
+			assert([&]() {
+				const u32 lod_count{ stream.LODCount() };
+				const LODOffset lod_offset{ stream.LODOffsets()[lod_count - 1] };
+				const u32 gpu_id_count{ (u32)lod_offset.offset + (u32)lod_offset.count };
+				return gpu_id_count == id_count;
+				}());
+
+			memcpy(gpu_ids, stream.GPU_IDs(), sizeof(ID::ID_Type) * id_count);
+		}
+
+	}
+
+	void GetLODOffsets(const ID::ID_Type* const geometry_ids, const f32* const thresholds, u32 id_count, util::vector<LODOffset>& offsets) {
+		assert(geometry_ids && thresholds && id_count);
+		assert(offsets.empty());
+
+		std::lock_guard lock{ geometry_mutex };
+
+		for (u32 i{ 0 }; i < id_count; i++) {
+			u8* const ptr{ geometry_hierarchies[geometry_ids[i]] };
+			if ((uintptr_t)ptr & single_mesh_marker) {
+				offsets.emplace_back(LODOffset{ 0, 1 });
+			}
+			else {
+				GeometryHierarchyStream stream{ ptr };
+				const u32 lod{ stream.LODFromThreshold(thresholds[i]) };
+				offsets.emplace_back(stream.LODOffsets()[lod]);
+			}
+		}
 	}
 }

@@ -210,10 +210,11 @@ namespace Editor.GameDev
             BuildSuccess = BuildDone = false;
             CallOnSTAThread(() =>
             {
+                _vsInstance.MainWindow.Visible = showWindow;
+
                 if (!_vsInstance.Solution.IsOpen) 
                     _vsInstance.Solution.Open(project.Solution);
 
-                _vsInstance.MainWindow.Visible = showWindow;
                 _vsInstance.Events.BuildEvents.OnBuildProjConfigBegin += OnBuildSolutionBegin;
                 _vsInstance.Events.BuildEvents.OnBuildProjConfigDone += OnBuildSolutionDone;
             });

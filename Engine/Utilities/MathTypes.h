@@ -3,6 +3,7 @@
 
 namespace Zetta::Math {
 	constexpr float PI = 3.1415926535897932384626433832795f;
+	constexpr float hPI = PI * 0.5f;
 	constexpr float TAU = 2.0f * PI;
 	constexpr float EPSILON = 1e-10f;
 #if defined(_WIN64)

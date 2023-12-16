@@ -4,6 +4,12 @@
 #include "D3D12GPass.h"
 #include "D3D12PostProcess.h"
 #include "D3D12Upload.h"
+#include "D3D12Content.h"
+#include "D3D12Camera.h"
+#include "D3D12Light.h"
+#include "D3D12LightCulling.h"
+
+#include "Shaders/SharedTypes.h"
 
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 611; }
 extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\"; }
@@ -154,6 +160,7 @@ namespace Zetta::Graphics::D3D12::Core {
 		D3D12Command		gfx_command;
 		SurfaceCollection	surfaces;
 		D3DX::D3D12ResourceBarrier resource_barrier{};
+		ConstantBuffer constant_buffers[FrameBufferCount];
 
 		DescriptorHeap		rtv_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV };
 		DescriptorHeap		dsv_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV };
@@ -225,6 +232,43 @@ namespace Zetta::Graphics::D3D12::Core {
 		}
 	}
 
+	D3D12FrameInfo GetD3D12FrameInfo(const FrameInfo& info, ConstantBuffer& cbuffer, const D3D12Surface& surface, u32 frame_idx, f32 delta_time) {
+		Camera::D3D12Camera& camera{ Camera::Get(info.camera_id) };
+		camera.Update();
+		HLSL::GlobalShaderData data{};
+
+		using namespace DirectX;
+		XMStoreFloat4x4A(&data.View, camera.View());
+		XMStoreFloat4x4A(&data.Projection, camera.Projection());
+		XMStoreFloat4x4A(&data.InvProjection, camera.InverseProjection());
+		XMStoreFloat4x4A(&data.ViewProjection, camera.ViewProjection());
+		XMStoreFloat4x4A(&data.InvViewProjection, camera.InverseViewProjection());
+		XMStoreFloat3(&data.CameraPosition, camera.Position());
+		XMStoreFloat3(&data.CameraDirection, camera.Direction());
+		data.ViewWidth = surface.Viewport().Width;
+		data.ViewHeight = surface.Viewport().Height;
+		data.NumDirectionalLights = Light::NoncullableLightCount(info.light_set_key);
+		data.DeltaTime = delta_time;
+
+		// NOTE: Avoid reading from the buffer as reads are ungodly slow.
+		HLSL::GlobalShaderData* const shader_data{ cbuffer.alloc<HLSL::GlobalShaderData>() };
+		// TODO: Handle the case when cbuffer is full.
+		memcpy(shader_data, &data, sizeof(HLSL::GlobalShaderData));
+
+		D3D12FrameInfo d3d12_info{
+			&info, 
+			&camera,
+			cbuffer.GPU_Address(shader_data),
+			surface.Width(),
+			surface.Height(),
+			surface.LightCullingID(),
+			frame_idx, 
+			delta_time
+		};
+
+		return d3d12_info;
+	}
+
 	namespace Detail {
 		void DeferredRelease(IUnknown* resource) {
 			const u32 frame_index{ CurrentFrameIndex() };
@@ -267,6 +311,26 @@ namespace Zetta::Graphics::D3D12::Core {
 		DXCall(hr = D3D12CreateDevice(main_adapter.Get(), max_feature_level, IID_PPV_ARGS(&main_device)));
 		if (FAILED(hr)) return FailedInit();
 
+#ifdef _DEBUG
+		{
+			ComPtr<ID3D12InfoQueue> info_queue;
+			DXCall(main_device->QueryInterface(IID_PPV_ARGS(&info_queue)));
+
+			D3D12_MESSAGE_ID disabled_messages[]{
+				D3D12_MESSAGE_ID_CLEARUNORDEREDACCESSVIEW_INCOMPATIBLE_WITH_STRUCTURED_BUFFERS,
+			};
+
+			D3D12_INFO_QUEUE_FILTER filter{};
+			filter.DenyList.NumIDs = _countof(disabled_messages);
+			filter.DenyList.pIDList = &disabled_messages[0];
+			info_queue->AddStorageFilterEntries(&filter);
+
+			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
+			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
+			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+		}
+#endif
+
 		bool res{ true };
 		res &= rtv_desc_heap.Initialize(512, false);
 		res &= dsv_desc_heap.Initialize(512, false);
@@ -274,21 +338,17 @@ namespace Zetta::Graphics::D3D12::Core {
 		res &= uav_desc_heap.Initialize(512, false);
 		if (!res) return FailedInit();
 
-#ifdef _DEBUG
-		{
-			ComPtr<ID3D12InfoQueue> info_queue;
-			DXCall(main_device->QueryInterface(IID_PPV_ARGS(&info_queue)));
-			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
-			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
-			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+		for (u32 i{ 0 }; i < FrameBufferCount; i++) {
+			new (&constant_buffers[i]) ConstantBuffer{ ConstantBuffer::GetDefaultInitInfo(1024 * 1024) };
+			NAME_D3D12_OBJECT_INDEXED(constant_buffers[i].Buffer(), i, L"Global Constant Buffer");
 		}
-#endif
 
 		new (&gfx_command) D3D12Command(main_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
 		if (!gfx_command.CommandQueue()) return FailedInit();
 
 		if (!(Shaders::Initialize() && GPass::Initialize() 
-			&& FX::Initialize() && Upload::Initialize())) return FailedInit();
+			&& FX::Initialize() && Upload::Initialize() 
+			&& Content::Initialize() && DeLight::Initialize())) return FailedInit();
 
 		NAME_D3D12_OBJECT(main_device, L"Main D3D12 Device");
 		NAME_D3D12_OBJECT(rtv_desc_heap.Heap(), L"RTV Descriptor Heap");
@@ -307,12 +367,16 @@ namespace Zetta::Graphics::D3D12::Core {
 		//		 Before their depending resources are released
 		for (u32 i{ 0 }; i < FrameBufferCount; i++) ProcessDeferredReleases(i);
 
+		DeLight::Shutdown();
+		Content::Shutdown();
 		Upload::Shutdown();
 		FX::Shutdown();
 		GPass::Shutdown();
 		Shaders::Shutdown();
 
 		Release(dxgi_factory);
+
+		for (u32 i{ 0 }; i < FrameBufferCount; i++) constant_buffers[i].Release();
 
 		rtv_desc_heap.ProcessDeferredFree(0);
 		dsv_desc_heap.ProcessDeferredFree(0);
@@ -353,6 +417,7 @@ namespace Zetta::Graphics::D3D12::Core {
 	DescriptorHeap& DSV_Heap() { return dsv_desc_heap; }
 	DescriptorHeap& SRV_Heap() { return srv_desc_heap; }
 	DescriptorHeap& UAV_Heap() { return uav_desc_heap; }
+	ConstantBuffer& CBuffer() { return constant_buffers[CurrentFrameIndex()]; }
 
 	ID3D12Device* const Device() { return main_device; }
 	u32 CurrentFrameIndex() { return gfx_command.FrameIndex(); }
@@ -383,23 +448,21 @@ namespace Zetta::Graphics::D3D12::Core {
 		return surfaces[id].Height();
 	}
 
-	void RenderSurface(SurfaceID id) {
+	void RenderSurface(SurfaceID id, FrameInfo info) {
 		gfx_command.BeginFrame();
 		ID3D12GraphicsCommandList* cmd_list{ gfx_command.CommandList() };
 
 		const u32 frame_idx{ CurrentFrameIndex() };
+		ConstantBuffer& cbuffer{ constant_buffers[frame_idx] };
+		cbuffer.Clear();
+
 		if (deferred_releases_flag[frame_idx]) ProcessDeferredReleases(frame_idx);
 
 		const D3D12Surface& surface{ surfaces[id] };
 		ID3D12Resource* const current_back_buffer{ surface.BackBuffer() };
+		const D3D12FrameInfo d3d12_info{ GetD3D12FrameInfo(info, cbuffer, surface, frame_idx, 16.67f) };
 
-
-		D3D12FrameInfo info {
-			surface.Width(),
-			surface.Height()
-		};
-
-		GPass::SetSize({ info.surface_width, info.surface_height });
+		GPass::SetSize({ d3d12_info.surface_width, d3d12_info.surface_height });
 		D3DX::D3D12ResourceBarrier& barriers{ resource_barrier };
 
 		ID3D12DescriptorHeap* const heaps[]{ srv_desc_heap.Heap() };
@@ -412,12 +475,14 @@ namespace Zetta::Graphics::D3D12::Core {
 		GPass::AddDepthPrepassTransitions(barriers);
 		barriers.Apply(cmd_list);
 		GPass::SetDepthPrepassRenderTargets(cmd_list);
-		GPass::DepthPrepass(cmd_list, info);
+		GPass::DepthPrepass(cmd_list, d3d12_info);
 
+		Light::UpdateLightBuffers(d3d12_info);
+		DeLight::CullLights(cmd_list, d3d12_info, barriers);
 		GPass::AddGPassTransitions(barriers);
 		barriers.Apply(cmd_list);
 		GPass::SetGPassRenderTargets(cmd_list);
-		GPass::Render(cmd_list, info);
+		GPass::Render(cmd_list, d3d12_info);
 
 		barriers.Add(current_back_buffer,
 			D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -425,7 +490,7 @@ namespace Zetta::Graphics::D3D12::Core {
 
 		GPass::AddPostProcessingTransitions(barriers);
 		barriers.Apply(cmd_list);
-		FX::PostProcessing(cmd_list, surface.RTV());
+		FX::PostProcessing(cmd_list, d3d12_info, surface.RTV());
 
 		D3DX::TransitionResource(cmd_list, current_back_buffer,
 			D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);

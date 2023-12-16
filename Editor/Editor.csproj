@@ -24,6 +24,7 @@
     <NoWarn>1701;1702;8612;8618;8600;8601;8602;8603;8604;8622;8629;8625;8767</NoWarn>
     <WarningLevel>7</WarningLevel>
     <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
+	  <Optimize>true</Optimize>
   </PropertyGroup>
 
   <ItemGroup>
@@ -99,27 +100,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <COMReference Include="EnvDTE80">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>0</VersionMinor>
-      <VersionMajor>8</VersionMajor>
-      <Guid>1a31287a-4d7d-413e-8e32-3b374931bd89</Guid>
-      <Lcid>0</Lcid>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>false</EmbedInteropTypes>
-    </COMReference>
-    <COMReference Include="EnvDTE">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>0</VersionMinor>
-      <VersionMajor>8</VersionMajor>
-      <Guid>80cc9f66-e7d8-4ddd-85b6-d9e6cd0e93e2</Guid>
-      <Lcid>0</Lcid>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>false</EmbedInteropTypes>
-    </COMReference>
-  </ItemGroup>
-
-  <ItemGroup>
     <Resource Include="Resources\ContentBrowser\ListView.png" />
     <Resource Include="Resources\ContentBrowser\TileView.png" />
   </ItemGroup>
@@ -152,6 +132,11 @@
     <None Include="Resources\PrimitiveMeshView\Checkmap.jpg" />
     <None Include="Resources\PrimitiveMeshView\Checkmap.png" />
     <None Include="Resources\PrimitiveMeshView\schizo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="envdte" Version="17.8.37221" />
+    <PackageReference Include="envdte80" Version="17.8.37221" />
   </ItemGroup>
 
   <ItemGroup>

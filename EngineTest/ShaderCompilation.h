@@ -22,6 +22,6 @@ struct ShaderFileInfo {
 	ShaderType::type type;
 };
 
-std::unique_ptr<u8[]> CompileShaders(ShaderFileInfo info, const char* file_path);
+std::unique_ptr<u8[]> CompileShaders(ShaderFileInfo info, const char* file_path, Zetta::util::vector<std::wstring>& extra_args);
 
 bool CompileShaders();

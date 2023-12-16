@@ -32,7 +32,7 @@ namespace Zetta::Graphics::D3D12::D3DX {
 		ComPtr<ID3DBlob> signature_blob{ nullptr };
 		ComPtr<ID3DBlob> error_blob{ nullptr };
 		HRESULT hr{ S_OK };
-		if (FAILED(D3D12SerializeVersionedRootSignature(&versioned_desc, &signature_blob, &error_blob))) {
+		if (FAILED(hr = D3D12SerializeVersionedRootSignature(&versioned_desc, &signature_blob, &error_blob))) {
 			DEBUG_OP(const char* error_msg{ error_blob ? (const char*)error_blob->GetBufferPointer() : "" });
 			DEBUG_OP(OutputDebugStringA(error_msg));
 			return nullptr;

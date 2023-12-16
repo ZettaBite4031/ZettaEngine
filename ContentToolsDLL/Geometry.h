@@ -14,7 +14,7 @@ namespace Zetta::Tools {
 	};
 	
 	namespace Elements {
-		struct ElementType {
+		struct ElementsType {
 			enum Type : u32 {
 				PositionOnly = 0x00,
 				StaticNormal = 0x01,
@@ -117,7 +117,7 @@ namespace Zetta::Tools {
 
 		// Output data
 		std::string									name;
-		Elements::ElementType::Type					elements_type;
+		Elements::ElementsType::Type					elements_type;
 		util::vector<u8>							positions_buffer;
 		util::vector<u8>							element_buffer;
 

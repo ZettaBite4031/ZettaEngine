@@ -5,6 +5,8 @@
     <ClCompile Include="RendererTest.cpp" />
     <ClCompile Include="ShaderCompilation.cpp" />
     <ClCompile Include="RenderItem.cpp" />
+    <ClCompile Include="Lights.cpp" />
+    <ClCompile Include="Scripts.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Test.h" />

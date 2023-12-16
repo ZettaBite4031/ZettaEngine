@@ -53,6 +53,193 @@ namespace Zetta::Graphics::D3D12{
 		const D3D12_DESCRIPTOR_HEAP_TYPE _type{};
 	};
 
+	struct D3D12BufferInitInfo {
+		ID3D12Heap1* heap{ nullptr };
+		const void* data{ nullptr };
+		D3D12_RESOURCE_ALLOCATION_INFO1 allocation_info{};
+		D3D12_RESOURCE_STATES initial_state{};
+		D3D12_RESOURCE_FLAGS flags{ D3D12_RESOURCE_FLAG_NONE };
+		u32 size{ 0 };
+		u32 stride{ 0 };
+		u32 element_count{ 0 };
+		u32 alignment{ 0 };
+		bool create_uav{ false };
+	};
+
+	class D3D12Buffer {
+	public:
+		D3D12Buffer() = default;
+		explicit D3D12Buffer(D3D12BufferInitInfo info, bool is_cpu_accessible);
+		DISABLE_COPY(D3D12Buffer);
+
+		constexpr D3D12Buffer(D3D12Buffer&& o) 
+			: _buffer{ o._buffer }, _gpu_addr{ o._gpu_addr }, _size{ o._size } {
+			o.Reset();
+		}
+
+		constexpr D3D12Buffer& operator=(D3D12Buffer&& o) {
+			assert(this != &o);
+			if (this != &o) {
+				Release();
+				Move(o);
+			}
+			return *this;
+		}
+
+		~D3D12Buffer() {
+			Release();
+		}
+
+		void Release();
+
+		[[nodiscard]] constexpr ID3D12Resource* const Buffer() const { return _buffer; }
+		[[nodiscard]] constexpr D3D12_GPU_VIRTUAL_ADDRESS GPU_Address() const { return _gpu_addr; }
+		[[nodiscard]] constexpr u32 Size() const { return _size; }
+
+	private:
+		constexpr void Move(D3D12Buffer& o) {
+			_buffer = o._buffer;
+			_gpu_addr = o._gpu_addr;
+			_size = o._size;
+			o.Reset();
+		}
+
+		constexpr void Reset() {
+			_buffer = nullptr;
+			_gpu_addr = 0;
+			_size = 0;
+		}
+
+		ID3D12Resource* _buffer{ nullptr };
+		D3D12_GPU_VIRTUAL_ADDRESS _gpu_addr{ 0 };
+		u32 _size{ 0 };
+	};
+
+	class ConstantBuffer {
+	public:
+		ConstantBuffer() = default;
+		explicit ConstantBuffer(D3D12BufferInitInfo info);
+		DISABLE_COPY_AND_MOVE(ConstantBuffer);
+		~ConstantBuffer() { Release(); }
+
+		void Release() {
+			_buffer.Release();
+			_cpu_addr = nullptr;
+			_cpu_offset = 0;
+		}
+
+		constexpr void Clear() { _cpu_offset = 0; }
+		[[nodiscard]] u8* const alloc(u32 size);
+
+		template<typename T>
+		[[nodiscard]] T* const alloc() {
+			return (T* const)alloc(sizeof(T));
+		}
+
+		[[nodiscard]] constexpr ID3D12Resource* const Buffer() const { return _buffer.Buffer(); }
+		[[nodiscard]] constexpr D3D12_GPU_VIRTUAL_ADDRESS GPU_Address() const { return _buffer.GPU_Address(); }
+		[[nodiscard]] constexpr u32 Size() const { return _buffer.Size(); }
+		[[nodiscard]] constexpr u8* const CPU_Address() const { return _cpu_addr; }
+
+		template<typename T>
+		[[nodiscard]] constexpr D3D12_GPU_VIRTUAL_ADDRESS GPU_Address(T* const allocation) {
+			std::lock_guard lock{ _mutex };
+			assert(_cpu_addr);
+			if (!_cpu_addr) return {};
+			const u8* const addr{ (const u8* const)allocation };
+			assert(addr <= _cpu_addr + _cpu_offset);
+			assert(addr >= _cpu_addr);
+			const u64 offset{ (u64)(addr - _cpu_addr) };
+			return _buffer.GPU_Address() + offset;
+		}
+
+		[[nodiscard]] constexpr static D3D12BufferInitInfo GetDefaultInitInfo(u32 size) {
+			assert(size);
+			D3D12BufferInitInfo info{};
+			info.size = size;
+			info.alignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+			return info;
+		}
+
+	private:
+		D3D12Buffer _buffer{};
+		u8* _cpu_addr{ nullptr };
+		u32 _cpu_offset{ 0 };
+		std::mutex _mutex{};
+	};
+
+	class StructuredBuffer {
+	public:
+		StructuredBuffer() = default;
+		explicit StructuredBuffer(const D3D12BufferInitInfo& info);
+		DISABLE_COPY(StructuredBuffer);
+		constexpr StructuredBuffer(StructuredBuffer&& o) 
+			: _buffer{ std::move(o._buffer) }, _uav{ o._uav }, _uav_shader_visible{ o._uav_shader_visible }, _stride{ o._stride } {
+			o.Reset();
+		}
+
+		constexpr StructuredBuffer& operator=(StructuredBuffer&& o) {
+			assert(this != &o);
+			if (this != &o) {
+				Release();
+				Move(o);
+			}
+			return *this;
+		}
+
+		~StructuredBuffer() { Release(); }
+
+		void Release();
+
+		void ClearUAV(ID3D12GraphicsCommandList* const cmd_list, const u32 *const values) const {
+			cmd_list->ClearUnorderedAccessViewUint(_uav_shader_visible.gpu, _uav.cpu, Buffer(), values, 0, nullptr);
+		}
+		void ClearUAV(ID3D12GraphicsCommandList* const cmd_list, const f32 *const values) const {
+			cmd_list->ClearUnorderedAccessViewFloat(_uav_shader_visible.gpu, _uav.cpu, Buffer(), values, 0, nullptr);
+		}
+
+		[[nodiscard]] constexpr ID3D12Resource* Buffer() const { return _buffer.Buffer(); }
+		[[nodiscard]] constexpr D3D12_GPU_VIRTUAL_ADDRESS GPU_Address() const { return _buffer.GPU_Address(); }
+		[[nodiscard]] constexpr u32 Size() const { return _buffer.Size(); }
+		[[nodiscard]] constexpr DescriptorHandle UAV() const { return _uav; }
+		[[nodiscard]] constexpr DescriptorHandle UAV_ShaderVisible() const { return _uav_shader_visible; }
+
+		[[nodiscard]] constexpr static D3D12BufferInitInfo GetDefaultInitInfo(u32 stride, u32 element_count) {
+			assert(stride && element_count);
+			D3D12BufferInitInfo info{};
+			info.size = stride * element_count;
+			info.stride = stride;
+			info.element_count = element_count;
+			info.alignment = stride;
+			info.flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+			return info;
+		}
+
+	private:
+		constexpr void Move(StructuredBuffer& o) {
+			_buffer = std::move(o._buffer);
+			_uav = o._uav;
+			_uav_shader_visible = o._uav_shader_visible;
+			_stride = o._stride;
+
+			o.Reset();
+		}
+
+		constexpr void Reset() {
+			_uav = {};
+			_uav_shader_visible = {};
+			_stride = 0;
+
+		}
+
+		
+
+		D3D12Buffer			_buffer{};
+		DescriptorHandle	_uav{};
+		DescriptorHandle	_uav_shader_visible{};
+		u32					_stride{ 0 };
+	};
+
 	struct D3D12TextureInitInfo {
 		ID3D12Heap1* heap{ nullptr };
 		ID3D12Resource* resource{ nullptr };

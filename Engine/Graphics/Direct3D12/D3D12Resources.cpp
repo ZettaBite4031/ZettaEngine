@@ -140,7 +140,83 @@ namespace Zetta::Graphics::D3D12 {
 	}
 #pragma endregion
 
-/* ------------------------------- RENDER TEXTURE----------------------------------------------------------------------------- */
+/* ------------------------------- D3D12 BUFFER	------------------------------------------------------------------------------ */
+#pragma region D3D12 Buffer
+	D3D12Buffer::D3D12Buffer(D3D12BufferInitInfo info, bool is_cpu_accessible) {
+		assert(!_buffer && info.size && info.alignment);
+		_size = (u32)Math::AlignSizeUp(info.size, info.alignment);
+		_buffer = D3DX::CreateBuffer(info.data, _size, is_cpu_accessible, info.initial_state, info.flags,
+									info.heap, info.allocation_info.Offset);
+		_gpu_addr = _buffer->GetGPUVirtualAddress();
+		NAME_D3D12_OBJECT_INDEXED(_buffer, _size, L"D3D12 Buffer - size");
+	}
+
+	void D3D12Buffer::Release() {
+		Core::DeferredRelease(_buffer);
+		_gpu_addr = 0;
+		_size = 0;
+	}
+
+#pragma endregion
+
+/* ------------------------------- CONSTANT BUFFER --------------------------------------------------------------------------- */
+#pragma region Constant Buffer
+	ConstantBuffer::ConstantBuffer(D3D12BufferInitInfo info) 
+		: _buffer{ info, true } {
+		NAME_D3D12_OBJECT_INDEXED(Buffer(), Size(), L"Constant Buffer - size");
+
+		D3D12_RANGE range{};
+		DXCall(Buffer()->Map(0, &range, (void**)(&_cpu_addr)));
+		assert(_cpu_addr);
+	}
+
+	u8* const ConstantBuffer::alloc(u32 size) {
+		std::lock_guard lock{ _mutex };
+		const u32 aligned_size{ (u32)D3DX::ConstantBufferAlignSize(size) };
+		assert(_cpu_offset + aligned_size <= _buffer.Size());
+		if (_cpu_offset + aligned_size <= _buffer.Size()) {
+			u8* const addr{ _cpu_addr + _cpu_offset };
+			_cpu_offset += aligned_size;
+			return addr;
+		}
+
+		return nullptr;
+	}
+#pragma endregion
+
+/* ------------------------------- STRUCTURED BUFFER ------------------------------------------------------------------------- */
+#pragma region Structured Buffer
+	StructuredBuffer::StructuredBuffer(const D3D12BufferInitInfo& info) 
+		: _buffer{ info, false }, _stride{ info.stride } {
+		assert(info.size && info.size == (info.stride * info.element_count));
+		assert(info.alignment > 0);
+		NAME_D3D12_OBJECT_INDEXED(Buffer(), info.size, L"Structured Buffer - size");
+
+		if (info.create_uav) {
+			assert(info.flags && D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+			_uav = Core::UAV_Heap().Alloc();
+			_uav_shader_visible = Core::SRV_Heap().Alloc();
+			D3D12_UNORDERED_ACCESS_VIEW_DESC desc{};
+			desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+			desc.Format = DXGI_FORMAT_UNKNOWN;
+			desc.Buffer.CounterOffsetInBytes = 0;
+			desc.Buffer.FirstElement = 0;
+			desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+			desc.Buffer.NumElements = info.element_count;
+			desc.Buffer.StructureByteStride = info.stride;
+
+			Core::Device()->CreateUnorderedAccessView(Buffer(), nullptr, &desc, _uav.cpu);
+			Core::Device()->CopyDescriptorsSimple(1, _uav_shader_visible.cpu, _uav.cpu, Core::SRV_Heap().Type());
+		}
+	}
+
+	void StructuredBuffer::Release() {
+		Core::SRV_Heap().Free(_uav_shader_visible);
+		Core::UAV_Heap().Free(_uav);
+		_buffer.Release();
+	}
+#pragma endregion
+/* ------------------------------- RENDER TEXTURE ---------------------------------------------------------------------------- */
 #pragma region Render Texture
 	D3D12RenderTexture::D3D12RenderTexture(D3D12TextureInitInfo info) 
 		: _texture{ info } {

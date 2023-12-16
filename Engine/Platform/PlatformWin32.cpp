@@ -1,13 +1,13 @@
+#ifdef _WIN64
 #include "Platform.h"
 #include "PlatformTypes.h"
+#include "Input/InputWin32.h"
 
 #ifdef CreateWindow
 #undef CreateWindow
 #endif
 
 namespace Zetta::Platform {
-#ifdef _WIN64
-
 	namespace {
 		struct WindowInfo {
 			HWND hwnd{ nullptr };
@@ -54,12 +54,16 @@ namespace Zetta::Platform {
 				break;
 			}
 
+			Input::ProcessInputMesasge(hwnd, msg, wparam, lparam);
+
 			if (resized && GetAsyncKeyState(VK_LBUTTON) >= 0) {
 				WindowInfo& info{ GetFromHandle(hwnd) };
 				assert(info.hwnd);
 				GetClientRect(info.hwnd, info.is_fullscreen ? &info.fullscreen_area : &info.client_area);
 				resized = false;
 			}
+
+			if (msg == WM_SYSCOMMAND && wparam == SC_KEYMENU) return 0;
 
 			LONG_PTR long_ptr{ GetWindowLongPtr(hwnd, 0) };
 			return long_ptr ? 

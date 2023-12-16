@@ -65,8 +65,7 @@ namespace Zetta::Tools {
             const u32 row_length{ horizontal_count + 1 }; // number of vertices in a row
             for (u32 j{ 0 }; j < vertical_count; ++j)
             {
-                u32 k{ 0 };
-                for (u32 i{ k }; i < horizontal_count; ++i)
+                for (u32 i{ 0 }; i < horizontal_count; ++i)
                 {
                     const u32 index[4]
                     {
@@ -84,7 +83,6 @@ namespace Zetta::Tools {
                     m.raw_indices.emplace_back(index[flip_winding ? 3 : 1]);
                     m.raw_indices.emplace_back(index[flip_winding ? 1 : 3]);
                 }
-                ++k;
             }
 
             const u32 num_indices{ 3 * 2 * horizontal_count * vertical_count };
@@ -230,7 +228,7 @@ namespace Zetta::Tools {
 			scene.lod_groups.emplace_back(lod);
 		}
 
-		void CreateCube(Scene& scene, const PrimitiveInitInfo& info){
+		void CreateCube(Scene&, const PrimitiveInitInfo&){
             
 		}
 
@@ -241,15 +239,15 @@ namespace Zetta::Tools {
             scene.lod_groups.emplace_back(lod);
 		}
 
-		void CreateIcosphere(Scene& scene, const PrimitiveInitInfo& info) {
+		void CreateIcosphere(Scene&, const PrimitiveInitInfo&) {
 
 		}
 
-		void CreateCylinder(Scene& scene, const PrimitiveInitInfo& info){
+		void CreateCylinder(Scene&, const PrimitiveInitInfo&){
 
 		}
 
-		void CreateCapsule(Scene& scene, const PrimitiveInitInfo& info){
+		void CreateCapsule(Scene&, const PrimitiveInitInfo&){
 
 		}
 

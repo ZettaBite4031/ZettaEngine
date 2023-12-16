@@ -1,14 +1,21 @@
 #include "Script.h"
 #include "Entity.h"
+#include "Transform.h"
+
+#define USE_TRANSFORM_CACHE_MAP 1
 
 namespace Zetta::Script {
 	namespace {
-		util::vector<Detail::ScriptPtr> entity_scripts;
-		util::vector<ID::ID_Type> id_mapping;
+		util::vector<Detail::ScriptPtr>				entity_scripts;
+		util::vector<ID::ID_Type>					id_mapping;
 
-		util::vector<ID::Generation_Type> generations;
-		util::deque<ScriptID> free_ids;
+		util::vector<ID::Generation_Type>			generations;
+		util::deque<ScriptID>						free_ids;
 
+		util::vector<Transform::ComponentCache>		transform_cache;
+#if USE_TRANSFORM_CACHE_MAP
+		std::unordered_map<ID::ID_Type, u32>		cache_map;
+#endif
 		using ScriptRegistry = std::unordered_map<size_t, Detail::ScriptCreator>;
 		ScriptRegistry& Registry() {
 			// NOTE: Static variable in function to avoid any weird initialization bugs
@@ -33,6 +40,40 @@ namespace Zetta::Script {
 				entity_scripts[id_mapping[index]] &&
 				entity_scripts[id_mapping[index]]->IsValid();
 		}
+#if USE_TRANSFORM_CACHE_MAP
+		Transform::ComponentCache* const GetCachePtr(const GameEntity::Entity* const entity) {
+			assert(GameEntity::IsAlive((*entity).GetID()));
+			const Transform::TransformID id{ (*entity).Transform().GetID() };
+
+			u32 index{ u32_invalid_id };
+			auto pair = cache_map.try_emplace(id, ID::Invalid_ID);
+
+			// cache_map didn't have an entry for this id, insert new entry
+			if (pair.second) {
+				index = (u32)transform_cache.size();
+				transform_cache.emplace_back();
+				transform_cache.back().id = id;
+				cache_map[id] = index;
+			}
+			else index = cache_map[id];
+
+			assert(index < transform_cache.size());
+			return &transform_cache[index];
+		}
+#else 
+		Transform::ComponentCache* const GetCachePtr(const GameEntity::Entity* const entity) {
+			assert(GameEntity::IsAlive((*entity).GetID()));
+			const Transform::TransformID id{ (*entity).Transform().GetID() };
+
+			for (auto& cache : transform_cache) if (cache.id == id) return &cache;
+
+			transform_cache.emplace_back();
+			transform_cache.back().id = id;
+
+			return &transform_cache.back();
+		}
+#endif
+
 	}
 
 	namespace Detail {
@@ -94,7 +135,40 @@ namespace Zetta::Script {
 
 	void Update(float dt) {
 		for (auto& ptr : entity_scripts) ptr->Update(dt);
+		if (transform_cache.size()) {
+			Transform::Update(transform_cache.data(), (u32)transform_cache.size());
+			transform_cache.clear();
+
+#if USE_TRANSFORM_CACHE_MAP
+			cache_map.clear();
+#endif
+		}
 	}
+
+	void EntityScript::SetRotation(const GameEntity::Entity* const entity, Math::v4 rotation_quaternion) {
+		Transform::ComponentCache& cache{ *GetCachePtr(entity) };
+		cache.flags |= Transform::ComponentFlags::Rotation;
+		cache.rotation = rotation_quaternion;
+	}
+
+	void EntityScript::SetOrientation(const GameEntity::Entity* const entity, Math::v3 orientation_vector) {
+		Transform::ComponentCache& cache{ *GetCachePtr(entity) };
+		cache.flags |= Transform::ComponentFlags::Orientation;
+		cache.orientation = orientation_vector;
+	}
+
+	void EntityScript::SetPosition(const GameEntity::Entity* const entity, Math::v3 position) {
+		Transform::ComponentCache& cache{ *GetCachePtr(entity) };
+		cache.flags |= Transform::ComponentFlags::Position;
+		cache.position = position;
+	}
+
+	void EntityScript::SetScale(const GameEntity::Entity* const entity, Math::v3 scale) {
+		Transform::ComponentCache& cache{ *GetCachePtr(entity) };
+		cache.flags |= Transform::ComponentFlags::Scale;
+		cache.scale = scale;
+	}
+
 }
 
 #ifdef USE_WITH_EDITOR

@@ -62,7 +62,7 @@ namespace Zetta::util {
 		}
 
 	private:
-		constexpr bool AlreadyRemoved(u32 id) {
+		constexpr bool AlreadyRemoved(u32 id) const {
 			if constexpr (sizeof(T) > sizeof(u32)) {
 				u32 i{ sizeof(u32) };
 				const u8* const p{ (const u8* const)std::addressof(_array[id]) };

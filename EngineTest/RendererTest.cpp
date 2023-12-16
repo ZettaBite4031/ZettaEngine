@@ -4,15 +4,18 @@
 #include "Graphics/Renderer.h"
 #include "Graphics/Direct3D12/D3D12Core.h"
 #include "Components/Entity.h"
+#include "Components/Script.h"
 #include "Components/Transform.h"
+#include "Input/Input.h"
 #include "RendererTest.h"
 #include "ShaderCompilation.h"
-
 #include <fstream>
 #include <filesystem>
-
 #if TEST_RENDERER
+
 using namespace Zetta;
+
+
 
 #pragma region MultiThreaded Test Worker Spawn
 // MultiThreading Test Worker Spawn /////////////////////////////////////////////////////////////////////////////
@@ -53,26 +56,33 @@ void JoinTestWorkers() {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma endregion
 
-struct {
+struct CameraSurface {
 	GameEntity::Entity entity{};
 	Graphics::Camera camera{};
-} camera;
+	Graphics::RenderSurface surface{};
+};
 
 ID::ID_Type model_id{ ID::Invalid_ID };
 ID::ID_Type item_id{ ID::Invalid_ID };
 
-Graphics::RenderSurface _surfaces[4];
+CameraSurface _surfaces[4];
 TimeIt timer{};
 
 bool resized{ false };
 bool is_restarting{ false };
-void DestroyRenderSurface(Graphics::RenderSurface& surface);
+void DestroyCameraSurface(CameraSurface& surface);
 
 bool TestInitialize();
 void TestShutdown();
 
-ID::ID_Type CreateRenderItem(ID::ID_Type entity_id);
-void DestroyRenderItem(ID::ID_Type render_item_id);
+void CreateRenderItems();
+void DestroyRenderItems();
+
+void GenerateLights();
+void RemoveLights();
+
+
+void GetRenderItems(ID::ID_Type* items, u32 count);
 
 LRESULT WinProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	bool toggle_fullscreen{ false };
@@ -82,8 +92,8 @@ LRESULT WinProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		bool all_closed{ true };
 		for (u32 i{ 0 }; i < _countof(_surfaces); i++) {
-			if (_surfaces[i].window.IsValid()) {
-				if (_surfaces[i].window.IsClosed()) DestroyRenderSurface(_surfaces[i]);
+			if (_surfaces[i].surface.window.IsValid()) {
+				if (_surfaces[i].surface.window.IsClosed()) DestroyCameraSurface(_surfaces[i]);
 				else all_closed = false;
 			}
 		}
@@ -116,16 +126,17 @@ LRESULT WinProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		break;
 	}
 
-	if ((resized && GetAsyncKeyState(VK_LBUTTON) >= 0) || toggle_fullscreen) {
+	if ((resized && GetKeyState(VK_LBUTTON) >= 0) || toggle_fullscreen) {
 		Platform::Window win{ Platform::WindowID{ (ID::ID_Type)GetWindowLongPtr(hwnd, GWLP_USERDATA) } };
 		for (u32 i{ 0 }; i < _countof(_surfaces); i++) {
-			if (win.GetID() == _surfaces[i].window.GetID()) {
+			if (win.GetID() == _surfaces[i].surface.window.GetID()) {
 				if (toggle_fullscreen) {
 					win.SetFullScreen(!win.IsFullscreen());
 					return 0;
 				}
 				else {
-					_surfaces[i].surface.Resize(win.Width(), win.Height());
+					_surfaces[i].surface.surface.Resize(win.Width(), win.Height());
+					_surfaces[i].camera.AspectRatio((f32)win.Width() / win.Height());
 					resized = false;
 				}
 				break;
@@ -136,31 +147,47 @@ LRESULT WinProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
-GameEntity::Entity CreateGameEntity() {
+GameEntity::Entity CreateGameEntity(Math::v3 position, Math::v3 rotation, const char* script_name) {
 	Transform::InitInfo transform_info{};
-	Math::v3a rot{ 0, 3.14f, 0 };
-	DirectX::XMVECTOR quat{ DirectX::XMQuaternionRotationRollPitchYawFromVector(DirectX::XMLoadFloat3A(&rot))};
+	DirectX::XMVECTOR quat{ DirectX::XMQuaternionRotationRollPitchYawFromVector(DirectX::XMLoadFloat3(&rotation))};
 	Math::v4a rot_quat;
 	DirectX::XMStoreFloat4A(&rot_quat, quat);
 	memcpy(&transform_info.rotation[0], &rot_quat.x, sizeof(transform_info.rotation));
+	memcpy(&transform_info.position[0], &position.x, sizeof(transform_info.position));
+
+	Script::InitInfo script_info{};
+	if (script_name) {
+		script_info.script_creator = Script::Detail::GetScriptCreatorInternal(Script::Detail::StringHash()(script_name));
+		assert(script_info.script_creator);
+	}
 
 	GameEntity::EntityInfo entity_info{};
 	entity_info.transform = &transform_info;
+	entity_info.script = &script_info;
 	GameEntity::Entity ntt{ GameEntity::CreateGameEntity(entity_info) };
 	assert(ntt.IsValid());
 	return ntt;
 }
 
-void CreateRenderSurface(Graphics::RenderSurface& surface, Platform::WindowInitInfo& info) {
-	surface.window = Platform::CreateWindow(&info);
-	surface.surface = Graphics::CreateSurface(surface.window);
+void RemoveGameEntity(GameEntity::EntityID id) {
+	GameEntity::RemoveGameEntity(id);
 }
 
-void DestroyRenderSurface(Graphics::RenderSurface& surface) {
-	Graphics::RenderSurface temp{ surface };
+void CreateCameraSurface(CameraSurface& surface, Platform::WindowInitInfo& info) {
+	surface.surface.window = Platform::CreateWindow(&info);
+	surface.surface.surface = Graphics::CreateSurface(surface.surface.window);
+	surface.entity = CreateGameEntity({ 13.76f, 3.f, -1.1f }, { -0.117f, -2.1f, 0.f }, "CameraScript");
+	surface.camera = Graphics::CreateCamera(Graphics::PerspectiveCameraInitInfo{ surface.entity.GetID() });
+	surface.camera.AspectRatio((f32)surface.surface.window.Width() / surface.surface.window.Height());
+}
+
+void DestroyCameraSurface(CameraSurface& surface) {
+	CameraSurface temp{ surface };
 	surface = {};
-	if(temp.surface.IsValid()) Graphics::RemoveSurface(temp.surface.GetID());
-	if(temp.window.IsValid()) Platform::RemoveWindow(temp.window.GetID());
+	if (temp.surface.surface.IsValid()) Graphics::RemoveSurface(temp.surface.surface.GetID());
+	if (temp.surface.window.IsValid()) Platform::RemoveWindow(temp.surface.window.GetID());
+	if (temp.camera.IsValid()) Graphics::RemoveCamera(temp.camera.GetID());
+	if (temp.entity.IsValid()) GameEntity::RemoveGameEntity(temp.entity.GetID());
 }
 
 bool ReadFile(std::filesystem::path path, std::unique_ptr<u8[]>& data, u64& size) {
@@ -194,7 +221,7 @@ bool TestInitialize() {
 	static_assert(_countof(info) == _countof(_surfaces));
 
 	for (u32 i{ 0 }; i < _countof(_surfaces); i++)
-		CreateRenderSurface(_surfaces[i], info[i]);
+		CreateCameraSurface(_surfaces[i], info[i]);
 
 	std::unique_ptr<u8[]> model;
 	u64 size{ 0 };
@@ -205,28 +232,56 @@ bool TestInitialize() {
 
 	InitTestWorkers(BufferTestWorker);
 
-	camera.entity = CreateGameEntity();
-	camera.camera = Graphics::CreateCamera(Graphics::PerspectiveCameraInitInfo(camera.entity.GetID()));
-	assert(camera.camera.IsValid());
+	CreateRenderItems();
 
-	item_id = CreateRenderItem(CreateGameEntity().GetID());
+	GenerateLights();
+
+	Input::InputSource source{};
+	source.binding = std::hash<std::string>()("move");
+	source.source_type = Input::InputSource::Keyboard;
+	source.code = Input::InputCode::KeyA;
+	source.multiplier = 1.f;
+	source.axis = Input::Axis::X;
+	Input::Bind(source);
+
+	source.code = Input::InputCode::KeyD;
+	source.multiplier = -1.f;
+	Input::Bind(source);
+
+	source.code = Input::InputCode::KeyW;
+	source.multiplier = 1.f;
+	source.axis = Input::Axis::Z;
+	Input::Bind(source);
+
+	source.code = Input::InputCode::KeyS;
+	source.multiplier = -1.f;
+	Input::Bind(source);
+
+	source.code = Input::InputCode::KeySpace;
+	source.multiplier = 1.f;
+	source.axis = Input::Axis::Y;
+	Input::Bind(source);
+
+	source.code = Input::InputCode::KeyLeftControl;
+	source.multiplier = -1.f;
+	Input::Bind(source);
 
 	is_restarting = false;
 	return true;
 }
 
 void TestShutdown() {
-	DestroyRenderItem(item_id);
+	Input::Unbind(std::hash<std::string>()("move"));
+	RemoveLights();
 
-	if (camera.camera.IsValid()) Graphics::RemoveCamera(camera.camera.GetID());
-	if (camera.entity.IsValid()) GameEntity::RemoveGameEntity(camera.entity.GetID());
+	DestroyRenderItems();
 
 	JoinTestWorkers();
 
 	if (ID::IsValid(model_id)) Content::DestroyResource(model_id, Content::AssetType::Mesh);
 
 	for (u32 i{ 0 }; i < _countof(_surfaces); i++)
-		DestroyRenderSurface(_surfaces[i]);
+		DestroyCameraSurface(_surfaces[i]);
 
 	Graphics::Shutdown();
 }
@@ -236,11 +291,32 @@ bool EngineTest::Initialize()  {
 }
 
 void EngineTest::Run()  {
+	static u32 counter{ 0 };
+	static u32 light_set_key{ 0 };
+	counter++;
+	//if ((counter % 90) == 0) light_set_key = (light_set_key + 1) % 2;
+
 	timer.Begin();
 	std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	Script::Update(timer.AvgDT());
 	for (u32 i{ 0 }; i < _countof(_surfaces); i++)
-		if(_surfaces[i].surface.IsValid())
-			_surfaces[i].surface.Render();
+		if (_surfaces[i].surface.surface.IsValid()) {
+			f32 thresholds[3]{ };
+
+			ID::ID_Type render_items[3]{};
+			GetRenderItems(&render_items[0], 3);
+
+			Graphics::FrameInfo info{};
+			info.render_item_ids = &render_items[0];
+			info.render_item_count = 3;
+			info.thresholds = &thresholds[0];
+			info.average_frame_time = timer.AvgDT();
+			info.light_set_key = light_set_key;
+			info.camera_id = _surfaces[i].camera.GetID();
+
+			assert(_countof(thresholds) >= info.render_item_count);
+			_surfaces[i].surface.surface.Render(info);
+		}
 	timer.End();
 }
 

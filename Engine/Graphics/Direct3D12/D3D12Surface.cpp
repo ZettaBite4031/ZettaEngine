@@ -1,5 +1,6 @@
 #include "D3D12Surface.h"
 #include "D3D12Core.h"
+#include "D3D12LightCulling.h"
 
 namespace Zetta::Graphics::D3D12 {
 	namespace {
@@ -10,21 +11,20 @@ namespace Zetta::Graphics::D3D12 {
 		}
 	}
 
-	void D3D12Surface::CreateSwapchain(IDXGIFactory7* factory, ID3D12CommandQueue* cmd_queue, DXGI_FORMAT format) {
+	void D3D12Surface::CreateSwapchain(IDXGIFactory7* factory, ID3D12CommandQueue* cmd_queue) {
 		assert(factory && cmd_queue);
 		Release();
 
 		if (SUCCEEDED(factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &_allow_tearing, sizeof(u32))) && _allow_tearing) 
 			_present_flags = DXGI_PRESENT_ALLOW_TEARING;
 		
-		_format = format;
 
 		DXGI_SWAP_CHAIN_DESC1 desc{};
 		desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 		desc.BufferCount = BufferCount;
 		desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		desc.Flags = _allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
-		desc.Format = ToNonSRGB(format);
+		desc.Format = ToNonSRGB(DefaultBackBufferFormat);
 		desc.Height = _window.Height();
 		desc.Width = _window.Width();
 		desc.SampleDesc.Count = 1;
@@ -45,6 +45,9 @@ namespace Zetta::Graphics::D3D12 {
 			_render_target_data[i].rtv = Core::RTV_Heap().Alloc();
 		
 		Finalize();
+
+		assert(!ID::IsValid(_light_culling_id));
+		_light_culling_id = DeLight::AddCuller();
 	}
 
 	void D3D12Surface::Finalize() {
@@ -53,7 +56,7 @@ namespace Zetta::Graphics::D3D12 {
 			assert(!data.resource);
 			DXCall(_swapchain->GetBuffer(i, IID_PPV_ARGS(&data.resource)));
 			D3D12_RENDER_TARGET_VIEW_DESC desc{};
-			desc.Format = _format;
+			desc.Format = DefaultBackBufferFormat;
 			desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 			Core::Device()->CreateRenderTargetView(data.resource, &desc, data.rtv.cpu);
 		}
@@ -95,6 +98,9 @@ namespace Zetta::Graphics::D3D12 {
 	}
 
 	void D3D12Surface::Release() {
+		if (ID::IsValid(_light_culling_id))
+			DeLight::RemoveCuller(_light_culling_id);
+
 		for (u32 i{ 0 }; i < BufferCount; i++) {
 			RenderTargetData& data{ _render_target_data[i] };
 			Core::Release(data.resource);

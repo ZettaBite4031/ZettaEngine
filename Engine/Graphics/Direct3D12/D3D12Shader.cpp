@@ -25,7 +25,7 @@ namespace Zetta::Graphics::D3D12::Shaders {
 				res &= index < EngineShader::count && !shader;
 				if (!res) break;
 				shader = reinterpret_cast<const Content::pCompiledShader>(&shader_blob[offset]);
-				offset += sizeof(u64) + Content::CompiledShader::hash_length + shader->ByteCodeSize();
+				offset += shader->Size();
 				index++;
 			}
 			assert(offset == size && index == EngineShader::count);

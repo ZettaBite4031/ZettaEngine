@@ -23,12 +23,12 @@ namespace Zetta::Graphics::D3D12::D3DX {
 		const D3D12_RASTERIZER_DESC no_cull{
 			D3D12_FILL_MODE_SOLID,
 			D3D12_CULL_MODE_NONE,
-			0,
+			1,
 			0,
 			0,
 			0,
 			1,
-			1,
+			0,
 			0,
 			0,
 			D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF
@@ -36,12 +36,12 @@ namespace Zetta::Graphics::D3D12::D3DX {
 		const D3D12_RASTERIZER_DESC backface_cull{
 			D3D12_FILL_MODE_SOLID,
 			D3D12_CULL_MODE_BACK,
-			0,
+			1,
 			0,
 			0,
 			0,
 			1,
-			1,
+			0,
 			0,
 			0,
 			D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF
@@ -49,12 +49,12 @@ namespace Zetta::Graphics::D3D12::D3DX {
 		const D3D12_RASTERIZER_DESC frontface_cull{
 			D3D12_FILL_MODE_SOLID,
 			D3D12_CULL_MODE_FRONT,
-			0,
+			1,
 			0,
 			0,
 			0,
 			1,
-			1,
+			0,
 			0,
 			0,
 			D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF
@@ -62,12 +62,12 @@ namespace Zetta::Graphics::D3D12::D3DX {
 		const D3D12_RASTERIZER_DESC wireframe_cull{
 			D3D12_FILL_MODE_WIREFRAME,
 			D3D12_CULL_MODE_NONE,
-			0,
+			1,
 			0,
 			0,
 			0,
 			1,
-			1,
+			0,
 			0,
 			0,
 			D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF
@@ -86,7 +86,138 @@ namespace Zetta::Graphics::D3D12::D3DX {
 			{},
 			0
 		};
+		const D3D12_DEPTH_STENCIL_DESC1 enabled{
+			1,
+			D3D12_DEPTH_WRITE_MASK_ALL,
+			D3D12_COMPARISON_FUNC_LESS_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0
+		};
+		const D3D12_DEPTH_STENCIL_DESC1 enabled_readonly{
+			1,
+			D3D12_DEPTH_WRITE_MASK_ZERO,
+			D3D12_COMPARISON_FUNC_LESS_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0
+		};
+		const D3D12_DEPTH_STENCIL_DESC1 reversed{
+			1,
+			D3D12_DEPTH_WRITE_MASK_ALL,
+			D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0
+		};
+		const D3D12_DEPTH_STENCIL_DESC1 reversed_readonly{
+			1,
+			D3D12_DEPTH_WRITE_MASK_ZERO,
+			D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0
+		};
 	} DepthState;
+
+	constexpr struct {
+		const D3D12_BLEND_DESC disabled{
+			0,											// AlphaToCoverageEnable
+			0,											// IndependentBlendEnable
+			{
+				{
+					0,									// BlendEnable
+					0,									// LogicOpEnable
+					D3D12_BLEND_SRC_ALPHA,				// SrcBlend
+					D3D12_BLEND_INV_SRC_ALPHA,			// DestBlend
+					D3D12_BLEND_OP_ADD,					// BlendOp
+					D3D12_BLEND_ONE,					// SrcBlendAlpha
+					D3D12_BLEND_ONE,					// DestBlendAlpha
+					D3D12_BLEND_OP_ADD,					// BlendOpAlpha
+					D3D12_LOGIC_OP_NOOP,				// LogicOp
+					D3D12_COLOR_WRITE_ENABLE_ALL		// RenderTargetWriteMask
+				},
+				{},{},{},{},{},{},{}
+			}
+		};
+		const D3D12_BLEND_DESC alpha_blend{
+			0,											// AlphaToCoverageEnable
+			0,											// IndependentBlendEnable
+			{
+				{
+					1,									// BlendEnable
+					0,									// LogicOpEnable
+					D3D12_BLEND_SRC_ALPHA,				// SrcBlend
+					D3D12_BLEND_INV_SRC_ALPHA,			// DestBlend
+					D3D12_BLEND_OP_ADD,					// BlendOp
+					D3D12_BLEND_ONE,					// SrcBlendAlpha
+					D3D12_BLEND_ONE,					// DestBlendAlpha
+					D3D12_BLEND_OP_ADD,					// BlendOpAlpha
+					D3D12_LOGIC_OP_NOOP,				// LogicOp
+					D3D12_COLOR_WRITE_ENABLE_ALL		// RenderTargetWriteMask
+				},
+				{},{},{},{},{},{},{}
+			}
+		};
+		const D3D12_BLEND_DESC additive{
+			0,											// AlphaToCoverageEnable
+			0,											// IndependentBlendEnable
+			{
+				{
+					0,									// BlendEnable
+					0,									// LogicOpEnable
+					D3D12_BLEND_ONE,					// SrcBlend
+					D3D12_BLEND_ONE,					// DestBlend
+					D3D12_BLEND_OP_ADD,					// BlendOp
+					D3D12_BLEND_ONE,					// SrcBlendAlpha
+					D3D12_BLEND_ONE,					// DestBlendAlpha
+					D3D12_BLEND_OP_ADD,					// BlendOpAlpha
+					D3D12_LOGIC_OP_NOOP,				// LogicOp
+					D3D12_COLOR_WRITE_ENABLE_ALL		// RenderTargetWriteMask
+				},
+				{},{},{},{},{},{},{}
+			}
+		};
+		const D3D12_BLEND_DESC premultiplied{
+			0,											// AlphaToCoverageEnable
+			0,											// IndependentBlendEnable
+			{
+				{
+					0,									// BlendEnable
+					0,									// LogicOpEnable
+					D3D12_BLEND_ONE,					// SrcBlend
+					D3D12_BLEND_INV_SRC_ALPHA,			// DestBlend
+					D3D12_BLEND_OP_ADD,					// BlendOp
+					D3D12_BLEND_ONE,					// SrcBlendAlpha
+					D3D12_BLEND_ONE,					// DestBlendAlpha
+					D3D12_BLEND_OP_ADD,					// BlendOpAlpha
+					D3D12_LOGIC_OP_NOOP,				// LogicOp
+					D3D12_COLOR_WRITE_ENABLE_ALL		// RenderTargetWriteMask
+				},
+				{},{},{},{},{},{},{}
+			}
+		};
+	} BlendState;
+
+	constexpr u64 ConstantBufferAlignSize(u64 size) {
+		return Math::AlignSizeUp<D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT>(size);
+	}
+
+	constexpr u64 TextureAlignSize(u64 size) {
+		return Math::AlignSizeUp<D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT>(size);
+	}
 
 	class D3D12ResourceBarrier {
 	public:
@@ -205,17 +336,23 @@ namespace Zetta::Graphics::D3D12::D3DX {
 	};
 
 	struct D3D12RootSignatureDesc : public D3D12_ROOT_SIGNATURE_DESC1 {
+		constexpr static D3D12_ROOT_SIGNATURE_FLAGS default_flags{
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED |
+			D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED };
+
 		constexpr explicit D3D12RootSignatureDesc(const D3D12RootParameter* params,
 												u32 param_count,
+												D3D12_ROOT_SIGNATURE_FLAGS flags = default_flags, 
 												const D3D12_STATIC_SAMPLER_DESC* samplers = nullptr,
-												u32 sample_count = 0, D3D12_ROOT_SIGNATURE_FLAGS flag =
-												D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS |
-												D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
-												D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
-												D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
-												D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS |
-												D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS) 
-			: D3D12_ROOT_SIGNATURE_DESC1{ param_count, params, sample_count, samplers, flag} {}
+												u32 sample_count = 0)
+			: D3D12_ROOT_SIGNATURE_DESC1{ param_count, params, sample_count, samplers, flags} {}
 
 		ID3D12RootSignature* Create() const {
 			return CreateRootSignature(*this);
@@ -234,7 +371,7 @@ namespace Zetta::Graphics::D3D12::D3DX {
 		const D3D12_PIPELINE_STATE_SUBOBJECT_TYPE _type{ type };
 		T _subobject{};
 	};
-
+#pragma warning(pop)
 
 #define PSS(name, ...) using D3D12PipelineStateSubobject##name = D3D12PipelineStateSubobject<__VA_ARGS__>;
 	PSS(RootSignature, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE, ID3D12RootSignature*);
@@ -263,6 +400,34 @@ namespace Zetta::Graphics::D3D12::D3DX {
 	PSS(AS, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_AS, D3D12_SHADER_BYTECODE);
 	PSS(MS, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS, D3D12_SHADER_BYTECODE);
 
+#undef PSS
+
+	struct D3D12PipelineStateSubobjectStream {
+		D3D12PipelineStateSubobjectRootSignature		RootSignature{ nullptr };
+		D3D12PipelineStateSubobjectVS					VS{};
+		D3D12PipelineStateSubobjectPS					PS{};
+		D3D12PipelineStateSubobjectDS					DS{};
+		D3D12PipelineStateSubobjectHS					HS{};
+		D3D12PipelineStateSubobjectGS					GS{};
+		D3D12PipelineStateSubobjectCS					CS{};
+		D3D12PipelineStateSubobjectStreamOutput			StreamOutput{};
+		D3D12PipelineStateSubobjectBlend				Blend{ BlendState.disabled };
+		D3D12PipelineStateSubobjectSampleMask			SampleMask{ UINT_MAX};
+		D3D12PipelineStateSubobjectRasterizer			Rasterizer{ RasterizerState.no_cull };
+		D3D12PipelineStateSubobjectInputLayout			InputLayout{};
+		D3D12PipelineStateSubobjectIBStripCutValue		IBStripCutValue{};
+		D3D12PipelineStateSubobjectPrimitiveTopology	PrimitiveTopology{};
+		D3D12PipelineStateSubobjectRenderTargetFormats	RenderTargetFormats{};
+		D3D12PipelineStateSubobjectDepthStencilFormats	DepthStencilFormats{};
+		D3D12PipelineStateSubobjectSampleDesc			SampleDesc{ {1, 0} };
+		D3D12PipelineStateSubobjectNodeMask				NodeMask{};
+		D3D12PipelineStateSubobjectCachedPSO			CachedPSO{};
+		D3D12PipelineStateSubobjectFlags				Flags{};
+		D3D12PipelineStateSubobjectDepthStencil1		DepthStencil1{ DepthState.disabled };
+		D3D12PipelineStateSubobjectViewInstancing		ViewInstancing{};
+		D3D12PipelineStateSubobjectAS					AS{};
+		D3D12PipelineStateSubobjectMS					MS{};
+	};
 
 	ID3D12PipelineState* CreatePipelineState(D3D12_PIPELINE_STATE_STREAM_DESC desc);
 	ID3D12PipelineState* CreatePipelineState(void* stream, u64 size);

@@ -3,14 +3,18 @@
 #include "D3D12Shaders.h"
 #include "D3D12Surface.h"
 #include "D3D12GPass.h"
-
+#include "D3D12LightCulling.h"
 
 namespace Zetta::Graphics::D3D12::FX {
 	namespace {
 		struct FXRootParamIndices {
 			enum : u32 {
+				GlobalShaderData,
 				RootConstants,
-				DescriptorTable,
+
+				//TODO: Temporary for light culling visualization. Remove later.
+				Frustums,
+				LightGridOpaque,
 
 				count
 			};
@@ -21,17 +25,16 @@ namespace Zetta::Graphics::D3D12::FX {
 
 		bool CreateFXPSOandRootSignature() {
 			assert(!fx_root_sig && !fx_pso);
-			D3DX::D3D12DescriptorRange range{
-				D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-				D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND, 0, 0,
-				D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE
-			};
 
 			using idx = FXRootParamIndices;
 			D3DX::D3D12RootParameter parameters[idx::count]{};
+			parameters[idx::GlobalShaderData].AsCBV(D3D12_SHADER_VISIBILITY_PIXEL, 0);
 			parameters[idx::RootConstants].AsConstants(1, D3D12_SHADER_VISIBILITY_PIXEL, 1);
-			parameters[idx::DescriptorTable].AsDescriptorTable(D3D12_SHADER_VISIBILITY_PIXEL, &range, 1);
-			const D3DX::D3D12RootSignatureDesc root_sig{ &parameters[0], _countof(parameters) };
+			parameters[idx::Frustums].AsSRV(D3D12_SHADER_VISIBILITY_PIXEL, 0);
+			parameters[idx::LightGridOpaque].AsSRV(D3D12_SHADER_VISIBILITY_PIXEL, 1);
+
+			D3DX::D3D12RootSignatureDesc root_sig{ &parameters[0], _countof(parameters) };
+			root_sig.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 			fx_root_sig = root_sig.Create();
 			assert(fx_root_sig);
 			NAME_D3D12_OBJECT(fx_root_sig, L"Post-Processing FX Root Signature");
@@ -68,15 +71,20 @@ namespace Zetta::Graphics::D3D12::FX {
 		Core::Release(fx_pso);
 	}
 
-	void PostProcessing(ID3D12GraphicsCommandList* cmd_list, D3D12_CPU_DESCRIPTOR_HANDLE target_rtv) {
+	void PostProcessing(ID3D12GraphicsCommandList* cmd_list, const D3D12FrameInfo& info, D3D12_CPU_DESCRIPTOR_HANDLE target_rtv) {
+		
+		const u32 frame_idx{ info.frame_index };
+		const ID::ID_Type light_culling_id{ info.light_culling_id };
 		cmd_list->SetGraphicsRootSignature(fx_root_sig);
 		cmd_list->SetPipelineState(fx_pso);
 
 		using idx = FXRootParamIndices;
+		cmd_list->SetGraphicsRootConstantBufferView(idx::GlobalShaderData, info.global_shader_data);
 		cmd_list->SetGraphicsRoot32BitConstant(idx::RootConstants, GPass::MainBuffer().SRV().index, 0);
-		cmd_list->SetGraphicsRootDescriptorTable(idx::DescriptorTable, Core::SRV_Heap().GPU_Start());
-
+		cmd_list->SetGraphicsRootShaderResourceView(idx::Frustums, DeLight::Frustums(light_culling_id, frame_idx));
+		cmd_list->SetGraphicsRootShaderResourceView(idx::LightGridOpaque, DeLight::LightGridOpaque(light_culling_id, frame_idx));
 		cmd_list->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 		cmd_list->OMSetRenderTargets(1, &target_rtv, 1, nullptr);
 		cmd_list->DrawInstanced(3, 1, 0, 0);
 	}

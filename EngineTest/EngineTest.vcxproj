@@ -143,9 +143,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Lights.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RendererTest.cpp" />
     <ClCompile Include="RenderItem.cpp" />
+    <ClCompile Include="Scripts.cpp" />
     <ClCompile Include="ShaderCompilation.cpp" />
   </ItemGroup>
   <ItemGroup>

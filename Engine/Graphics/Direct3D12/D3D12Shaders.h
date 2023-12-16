@@ -7,6 +7,8 @@ namespace Zetta::Graphics::D3D12::Shaders {
 			FullscreenTriangleVS = 0,
 			FillColorPS = 1,
 			PostProcessPS = 2,
+			GridFrustumCS = 3,
+			CullLightsCS = 4,
 
 			count
 		};

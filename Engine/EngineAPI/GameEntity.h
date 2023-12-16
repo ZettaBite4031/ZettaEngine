@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Components/ComponentCommon.h"
+#include "../Components/ComponentCommon.h"
 #include "TransformComponent.h"
 #include "ScriptComponent.h"
 
@@ -15,8 +15,14 @@ namespace Zetta{
 			constexpr EntityID GetID() const { return _id; }
 			constexpr bool IsValid() const { return ID::IsValid(_id); }
 
-			Transform::Component Transform() const;
-			Script::Component Script() const;
+			[[nodiscard]] Transform::Component Transform() const;
+			[[nodiscard]] Script::Component Script() const;
+
+			[[nodiscard]] Math::v4 Rotation() const { return Transform().Rotation(); }
+			[[nodiscard]] Math::v3 Orientation() const { return Transform().Orientation(); }
+			[[nodiscard]] Math::v3 Position() const { return Transform().Position(); }
+			[[nodiscard]] Math::v3 Scale() const { return Transform().Scale(); }
+
 		private:
 			EntityID _id;
 		};
@@ -31,6 +37,16 @@ namespace Zetta{
 		protected:
 			constexpr explicit EntityScript(GameEntity::Entity entity)
 				: GameEntity::Entity{ entity.GetID() } { }
+
+			void SetRotation(Math::v4 rotation_quaternion) const { SetRotation(this, rotation_quaternion); }
+			void SetOrientation(Math::v3 orientation_vector) const { SetOrientation(this, orientation_vector); }
+			void SetPosition(Math::v3 position) const { SetPosition(this, position); }
+			void SetScale(Math::v3 scale) const { SetScale(this, scale); }
+
+			static void SetRotation(const GameEntity::Entity* const entity, Math::v4 rotation_quaternion);
+			static void SetOrientation(const GameEntity::Entity* const entity, Math::v3 orientation_vector);
+			static void SetPosition(const GameEntity::Entity* const entity, Math::v3 position);
+			static void SetScale(const GameEntity::Entity* const entity, Math::v3 scale);
 		};
 
 		namespace Detail {

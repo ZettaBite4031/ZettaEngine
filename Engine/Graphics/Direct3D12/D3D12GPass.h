@@ -7,6 +7,26 @@ namespace Zetta::Graphics::D3D12 {
 }
 
 namespace Zetta::Graphics::D3D12::GPass {
+
+	constexpr DXGI_FORMAT main_buffer_format{ DXGI_FORMAT_R16G16B16A16_FLOAT };
+	constexpr DXGI_FORMAT depth_buffer_format{ DXGI_FORMAT_D32_FLOAT };
+
+	struct OpaqueRootParameter {
+		enum Parameter : u32 {
+			GlobalShaderData,
+			PerObjectData,
+			PositionBuffer,
+			ElementBuffer,
+			SRV_Indices,
+			DirectionLights,
+			CullableLights,
+			LightGrid,
+			LightIndexList,
+
+			count
+		};
+	};
+
 	bool Initialize();
 	void Shutdown();
 

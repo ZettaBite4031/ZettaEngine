@@ -132,19 +132,19 @@ namespace Zetta::Tools {
             }
         }
 
-        u64 GetVertexElementSize(Elements::ElementType::Type elements_type) {
+        u64 GetVertexElementSize(Elements::ElementsType::Type elements_type) {
             using namespace Elements;
             switch (elements_type)
             {
-            case ElementType::StaticNormal:                 return sizeof(StaticNormal);
-            case ElementType::StaticNormalTexture:          return sizeof(StaticNormalTexture);
-            case ElementType::StaticColor:                  return sizeof(StaticColor);
-            case ElementType::Skeletal:                     return sizeof(Skeletal);
-            case ElementType::SkeletalColor:                return sizeof(SkeletalColor);
-            case ElementType::SkeletalNormal:               return sizeof(SkeletalNormal);
-            case ElementType::SkeletalNormalColor:          return sizeof(SkeletalNormalColor);
-            case ElementType::SkeletalNormalTexture:        return sizeof(SkeletalNormalTexture);
-            case ElementType::SkeletalNormalTextureColor:   return sizeof(SkeletalNormalTextureColor);
+            case ElementsType::StaticNormal:                 return sizeof(StaticNormal);
+            case ElementsType::StaticNormalTexture:          return sizeof(StaticNormalTexture);
+            case ElementsType::StaticColor:                  return sizeof(StaticColor);
+            case ElementsType::Skeletal:                     return sizeof(Skeletal);
+            case ElementsType::SkeletalColor:                return sizeof(SkeletalColor);
+            case ElementsType::SkeletalNormal:               return sizeof(SkeletalNormal);
+            case ElementsType::SkeletalNormalColor:          return sizeof(SkeletalNormalColor);
+            case ElementsType::SkeletalNormalTexture:        return sizeof(SkeletalNormalTexture);
+            case ElementsType::SkeletalNormalTextureColor:   return sizeof(SkeletalNormalTextureColor);
             }
 
             return 0;
@@ -170,7 +170,7 @@ namespace Zetta::Tools {
             util::vector<u16v2> tangents(num_vertices);
             util::vector<u8v3> joint_weights(num_vertices);
 
-            if (m.elements_type & Elements::ElementType::StaticNormal)
+            if (m.elements_type & Elements::ElementsType::StaticNormal)
             {
                 // normals only
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -180,7 +180,7 @@ namespace Zetta::Tools {
                     normals[i] = { (u16)PackFloat<16>(v.normal.x, -1.f, 1.f), (u16)PackFloat<16>(v.normal.y, -1.f, 1.f) };
                 }
 
-                if (m.elements_type & Elements::ElementType::StaticNormalTexture)
+                if (m.elements_type & Elements::ElementsType::StaticNormalTexture)
                 {
                     // full T-space
                     for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -192,7 +192,7 @@ namespace Zetta::Tools {
                 }
             }
 
-            if (m.elements_type & Elements::ElementType::Skeletal)
+            if (m.elements_type & Elements::ElementsType::Skeletal)
             {
                 for (u32 i{ 0 }; i < num_vertices; ++i)
                 {
@@ -212,7 +212,7 @@ namespace Zetta::Tools {
 
             switch (m.elements_type)
             {
-            case ElementType::StaticColor:
+            case ElementsType::StaticColor:
             {
                 StaticColor* const element_buffer{ (StaticColor* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -222,7 +222,7 @@ namespace Zetta::Tools {
                 }
             }
             break;
-            case ElementType::StaticNormal:
+            case ElementsType::StaticNormal:
             {
                 StaticNormal* const element_buffer{ (StaticNormal* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -232,7 +232,7 @@ namespace Zetta::Tools {
                 }
             }
             break;
-            case ElementType::StaticNormalTexture:
+            case ElementsType::StaticNormalTexture:
             {
                 StaticNormalTexture* const element_buffer{ (StaticNormalTexture* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -244,7 +244,7 @@ namespace Zetta::Tools {
                 }
             }
             break;
-            case ElementType::Skeletal:
+            case ElementsType::Skeletal:
             {
                 Skeletal* const element_buffer{ (Skeletal* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -256,7 +256,7 @@ namespace Zetta::Tools {
                 }
             }
             break;
-            case ElementType::SkeletalColor:
+            case ElementsType::SkeletalColor:
             {
                 SkeletalColor* const element_buffer{ (SkeletalColor* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -269,7 +269,7 @@ namespace Zetta::Tools {
                 }
             }
             break;
-            case ElementType::SkeletalNormal:
+            case ElementsType::SkeletalNormal:
             {
                 SkeletalNormal* const element_buffer{ (SkeletalNormal* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -282,7 +282,7 @@ namespace Zetta::Tools {
                 }
             }
             break;
-            case ElementType::SkeletalNormalColor:
+            case ElementsType::SkeletalNormalColor:
             {
                 SkeletalNormalColor* const element_buffer{ (SkeletalNormalColor* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -295,7 +295,7 @@ namespace Zetta::Tools {
                 }
             }
             break;
-            case ElementType::SkeletalNormalTexture:
+            case ElementsType::SkeletalNormalTexture:
             {
                 SkeletalNormalTexture* const element_buffer{ (SkeletalNormalTexture* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -308,7 +308,7 @@ namespace Zetta::Tools {
                 }
             }
             break;
-            case ElementType::SkeletalNormalTextureColor:
+            case ElementsType::SkeletalNormalTextureColor:
             {
                 SkeletalNormalTextureColor* const element_buffer{ (SkeletalNormalTextureColor* const)m.element_buffer.data() };
                 for (u32 i{ 0 }; i < num_vertices; ++i)
@@ -329,10 +329,10 @@ namespace Zetta::Tools {
             using namespace Elements;
             if (m.normals.size()) {
                 if (m.uv_sets.size() && m.uv_sets[0].size())
-                    m.elements_type = ElementType::StaticNormalTexture;
-                else m.elements_type = ElementType::StaticNormal;
+                    m.elements_type = ElementsType::StaticNormalTexture;
+                else m.elements_type = ElementsType::StaticNormal;
             }
-            else if (m.colors.size()) m.elements_type = ElementType::StaticColor;
+            else if (m.colors.size()) m.elements_type = ElementsType::StaticColor;
             
             // TODO: Implement Skeletal meshes when the data is available.
         }

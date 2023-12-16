@@ -1,5 +1,5 @@
 #pragma once
-#include "Components/ComponentCommon.h"
+#include "../Components/ComponentCommon.h"
 
 namespace Zetta::Transform {
 	DEFINE_TYPED_ID(TransformID);

@@ -187,7 +187,7 @@ namespace Editor.Content
 			get => _SmoothingAngle;
 			set
 			{
-				if (_SmoothingAngle != value)
+				if (!_SmoothingAngle.IsEquals(value))
 				{
 					_SmoothingAngle = value;
 					OnPropertyChanged(nameof(SmoothingAngle));
@@ -470,7 +470,7 @@ namespace Editor.Content
 				}
 
 				// For Testing. Remove Later!!1!11!111!!!
-				//PackForEngine();
+				PackForEngine();
 				// For Testing. Remove Later!!1!11!111!!!
 			}
 			catch (Exception ex)
@@ -579,7 +579,7 @@ namespace Editor.Content
 			Debug.Assert(data?.Length > 0);
 
 			// For Testing. Remove Later !!!!1111!!!1!!1!
-			using (var fs = new FileStream(@"..\..\EngineTest\model.model", FileMode.Create))
+			using (var fs = new FileStream(@"..\..\x64\model.model", FileMode.Create))
 			{
 				fs.Write(data, 0, data.Length);
 			}

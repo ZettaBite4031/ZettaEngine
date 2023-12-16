@@ -12,21 +12,21 @@ namespace Zetta::Graphics {
 
 		PlatformInterface gfx{};
 
-		bool SetPlatformInterface(GraphicsPlatform platform) {
+		bool SetPlatformInterface(GraphicsPlatform platform, PlatformInterface& pi) {
 			switch (platform) {
 			case GraphicsPlatform::Direct3D12:
-				D3D12::GetPlatformInterface(gfx);
+				D3D12::GetPlatformInterface(pi);
 				break;
 			default:
 				return false;
 			}
-			assert(gfx.platform == platform);
+			assert(pi.platform == platform);
 			return true;
 		}
 	}
 
 	bool Initialize(GraphicsPlatform platform) {
-		return SetPlatformInterface(platform) && gfx.Initialize();
+		return SetPlatformInterface(platform, gfx) && gfx.Initialize();
 	}
 
 	void Shutdown() {
@@ -66,9 +66,9 @@ namespace Zetta::Graphics {
 		return gfx.Surface.Height(_id);
 	}
 
-	void Surface::Render() const {
+	void Surface::Render(FrameInfo info) const {
 		assert(IsValid());
-		gfx.Surface.Render(_id);
+		gfx.Surface.Render(_id, info);
 	}
 
 	void Camera::up(Math::v3 up) const {
@@ -208,11 +208,130 @@ namespace Zetta::Graphics {
 		gfx.Camera.Remove(id);
 	}
 
+	void Light::IsEnabled(bool is_enabled) const {
+		assert(IsValid());
+		gfx.Light.SetParameter(_id, _light_set_key, LightParameter::IsEnabled, &is_enabled, sizeof(is_enabled));
+	}
+
+	void Light::Intensity(f32 intensity) const {
+		assert(IsValid());
+		gfx.Light.SetParameter(_id, _light_set_key, LightParameter::Intensity, &intensity, sizeof(intensity)); 
+	}
+
+	void Light::Color(Math::v3 color) const {
+		assert(IsValid());
+		gfx.Light.SetParameter(_id, _light_set_key, LightParameter::Color, &color, sizeof(color));
+	}
+
+	void Light::Attenuation(Math::v3 attenuation) const{
+		assert(IsValid());
+		gfx.Light.SetParameter(_id, _light_set_key, LightParameter::Attenuation, &attenuation, sizeof(attenuation));
+	}
+
+	void Light::Range(f32 range) const{
+		assert(IsValid());
+		gfx.Light.SetParameter(_id, _light_set_key, LightParameter::Range, &range, sizeof(range));
+	}
+
+	void Light::ConeAngles(f32 umbra, f32 penumbra) const {
+		assert(IsValid());
+		gfx.Light.SetParameter(_id, _light_set_key, LightParameter::Umbra, &umbra, sizeof(umbra));
+		gfx.Light.SetParameter(_id, _light_set_key, LightParameter::Penumbra, &penumbra, sizeof(penumbra));
+	}
+
+	bool Light::IsEnabled() const {
+		assert(IsValid());
+		bool is_enabled;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::IsEnabled, &is_enabled, sizeof(is_enabled));
+		return is_enabled;
+	}
+
+	f32 Light::Intensity() const {
+		assert(IsValid());
+		f32 intensity;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::Intensity, &intensity, sizeof(intensity));
+		return intensity;
+	}
+
+	Math::v3 Light::Color() const {
+		assert(IsValid());
+		Math::v3 color;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::Color, &color, sizeof(color));
+		return color;
+	}
+
+	Math::v3 Light::Attenuation() const {
+		assert(IsValid());
+		Math::v3 attenuation;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::Attenuation, &attenuation, sizeof(attenuation));
+		return attenuation;
+	}
+
+	f32 Light::Range() const {
+		assert(IsValid());
+		f32 range;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::Range, &range, sizeof(range));
+		return range;
+	}
+
+	f32 Light::Umbra() const {
+		assert(IsValid());
+		f32 umbra;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::Umbra, &umbra, sizeof(umbra));
+		return umbra;
+	}
+
+	f32 Light::Penumbra() const {
+		assert(IsValid());
+		f32 penumbra;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::Penumbra, &penumbra, sizeof(penumbra));
+		return penumbra;
+	}
+
+	Light::Type Light::LightType() const {
+		assert(IsValid());
+		Light::Type type;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::Type, &type, sizeof(type));
+		return type;
+	}
+
+	ID::ID_Type Light::EntityID() const {
+		assert(IsValid());
+		ID::ID_Type id;
+		gfx.Light.GetParameter(_id, _light_set_key, LightParameter::EntityID, &id, sizeof(id));
+		return id;
+	}
+
+	Light CreateLight(LightInitInfo info) {
+		return gfx.Light.Create(info);
+	}
+
+	void RemoveLight(LightID id, u64 light_set_key) {
+		gfx.Light.Remove(id, light_set_key);
+	}
+
 	ID::ID_Type AddSubmesh(const u8*& data) {
 		return gfx.Resources.AddSubmesh(data);
 	}
 
 	void RemoveSubmesh(ID::ID_Type id) {
 		gfx.Resources.RemoveSubmesh(id);
+	}
+
+	ID::ID_Type AddMaterial(MaterialInitInfo info) {
+		return gfx.Resources.AddMaterial(info);
+	}
+
+	void RemoveMaterial(ID::ID_Type id) {
+		gfx.Resources.RemoveMaterial(id);
+	}
+
+	ID::ID_Type AddRenderItem(ID::ID_Type entity_id, ID::ID_Type geometry_content_id,
+		u32 mat_count, const ID::ID_Type* const mat_ids) {
+		return gfx.Resources.AddRenderItem(entity_id, geometry_content_id, mat_count, mat_ids);
+	}
+
+	void RemoveRenderItem(ID::ID_Type id) {
+		gfx.Resources.RemoveRenderItem(id);
 	}
 }

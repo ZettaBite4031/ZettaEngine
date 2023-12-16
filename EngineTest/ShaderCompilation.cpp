@@ -24,9 +24,11 @@ namespace {
 	};
 
 	constexpr EngineShaderInfo engine_shader_files[]{
-		EngineShader::FullscreenTriangleVS, {"FullScreenTriangle.hlsl", "FullScreenTriangleVS", ShaderType::vertex},
-		EngineShader::FillColorPS, {"FillColor.hlsl", "FillColorPS", ShaderType::pixel},
-		EngineShader::PostProcessPS, {"PostProcess.hlsl", "PostProcessPS", ShaderType::pixel},
+		{ EngineShader::FullscreenTriangleVS, {"FullScreenTriangle.hlsl", "FullScreenTriangleVS", ShaderType::vertex} },
+		{ EngineShader::FillColorPS, {"FillColor.hlsl", "FillColorPS", ShaderType::pixel} },
+		{ EngineShader::PostProcessPS, {"PostProcess.hlsl", "PostProcessPS", ShaderType::pixel} },
+		{ EngineShader::GridFrustumCS, {"GridFrustums.hlsl", "ComputeGridFrustumsCS", ShaderType::compute} },
+		{ EngineShader::CullLightsCS, {"CullLights.hlsl", "CullLightsCS", ShaderType::compute} },
 	};
 
 	static_assert(_countof(engine_shader_files) == EngineShader::count);
@@ -58,7 +60,7 @@ namespace {
 
 		DISABLE_COPY_AND_MOVE(ShaderCompiler);
 
-		DXCCompiledShader Compile(ShaderFileInfo info, std::filesystem::path full_path) {
+		DXCCompiledShader Compile(ShaderFileInfo info, std::filesystem::path full_path, util::vector<std::wstring>& extra_args) {
 			assert(_compiler && _utils && _include_handler);
 			HRESULT hr{ S_OK };
 
@@ -68,28 +70,7 @@ namespace {
 			if (FAILED(hr)) return {};
 			assert(source_blob && source_blob->GetBufferSize());
 
-			std::wstring file{ ToWString(info.file) };
-			std::wstring func{ ToWString(info.function) };
-			std::wstring prof{ ToWString(_profile_strings[(u32)info.type]) };
-			std::wstring incl{ ToWString(shaders_source_path) };
 
-			LPCWSTR args[]{
-				file.c_str(),						// Optional shader  source file name for error reporting
-				L"-E", func.c_str(),				// Entry function
-				L"-T", prof.c_str(),				// Target function
-				L"-I", incl.c_str(),				// Shader location
-				L"-enable-16bit-types",
-				DXC_ARG_ALL_RESOURCES_BOUND,
-#if _DEBUG
-				DXC_ARG_DEBUG,
-				DXC_ARG_SKIP_OPTIMIZATIONS,
-#else
-				DXC_ARG_OPTIMIZATION_LEVEL3,
-#endif
-				DXC_ARG_WARNINGS_ARE_ERRORS,
-				L"-Qstrip_reflect",					// Strip reflections into a separate blob
-				L"-Qstrip_debug",					// Strip debug information into a separate blob
-			};
 
 			OutputDebugStringA("Compiling ");
 			OutputDebugStringA(info.file);
@@ -97,18 +78,21 @@ namespace {
 			OutputDebugStringA(info.function);
 			OutputDebugStringA("\n");
 
-			return Compile(source_blob.Get(), args, _countof(args));
+			return Compile(source_blob.Get(), GetArgs(info, extra_args));
 		}
 
-		DXCCompiledShader Compile(IDxcBlobEncoding* source_blob, LPCWSTR* args, u32 num_args) {
+		DXCCompiledShader Compile(IDxcBlobEncoding* source_blob, util::vector<std::wstring> compiler_args) {
 			DxcBuffer buffer{};
 			buffer.Encoding = DXC_CP_ACP;
 			buffer.Ptr = source_blob->GetBufferPointer();
 			buffer.Size = source_blob->GetBufferSize();
 
+			util::vector<LPCWSTR> args;
+			for (const auto& arg : compiler_args) args.emplace_back(arg.c_str());
+
 			HRESULT hr{ S_OK };
 			ComPtr<IDxcResult> res{ nullptr };
-			DXCall(hr = _compiler->Compile(&buffer, args, num_args, _include_handler.Get(), IID_PPV_ARGS(&res)));
+			DXCall(hr = _compiler->Compile(&buffer, args.data(), (u32)args.size(), _include_handler.Get(), IID_PPV_ARGS(&res)));
 			if (FAILED(hr)) return {};
 
 			ComPtr<IDxcBlobUtf8> err{ nullptr };
@@ -159,6 +143,34 @@ namespace {
 		}
 
 	private:
+		util::vector<std::wstring> GetArgs(const ShaderFileInfo info, util::vector<std::wstring>& extra_args) {
+			util::vector<std::wstring> args{};
+
+			args.emplace_back(ToWString(info.file));
+			args.emplace_back(L"-E");
+			args.emplace_back(ToWString(info.function));
+			args.emplace_back(L"-T");
+			args.emplace_back(ToWString(_profile_strings[(u32)info.type]));
+			args.emplace_back(L"-I");
+			args.emplace_back(ToWString(shaders_source_path));
+			args.emplace_back(L"-enable-16bit-types");
+			args.emplace_back(DXC_ARG_ALL_RESOURCES_BOUND);
+#ifdef _DEBUG
+			args.emplace_back(DXC_ARG_DEBUG);
+			args.emplace_back(DXC_ARG_SKIP_OPTIMIZATIONS);
+#else
+			args.emplace_back(DXC_ARG_OPTIMIZATION_LEVEL3);
+#endif
+			args.emplace_back(DXC_ARG_WARNINGS_ARE_ERRORS);
+			args.emplace_back(L"-Qstrip_reflect");
+			args.emplace_back(L"-Qstrip_debug");
+			
+			for (const auto& arg : extra_args)
+				args.emplace_back(arg.c_str());
+
+			return args;
+		}
+
 		constexpr static const char* _profile_strings[]{ "vs_6_6","hs_6_6", "ds_6_6", "gs_6_6", "ps_6_6", "cs_6_6", "as_6_6", "ms_6_6" };
 		static_assert(_countof(_profile_strings) == ShaderType::count);
 
@@ -176,23 +188,12 @@ namespace {
 		if (!std::filesystem::exists(engine_shaders_path)) return false;
 		auto shaders_compilation_time = std::filesystem::last_write_time(engine_shaders_path);
 
-		std::filesystem::path full_path{};
-
-		// Check if either of engine shader source files is newer than the compiled shader file.
-		// In that case, we need to recompile.
-		for (u32 i{ 0 }; i < EngineShader::count; ++i)
-		{
-			auto& file = engine_shader_files[i];
-
-			full_path = shaders_source_path;
-			full_path += file.info.file;
-			if (!std::filesystem::exists(full_path)) return false;
-
-			auto shader_file_time = std::filesystem::last_write_time(full_path);
-			if (shader_file_time > shaders_compilation_time) return false;
-			
+		for (const auto& entry : std::filesystem::directory_iterator{ shaders_source_path }) {
+			if (entry.last_write_time() > shaders_compilation_time) {
+				return false;
+			}
 		}
-
+		
 		return true;
 	}
 
@@ -214,7 +215,7 @@ namespace {
 	}
 }
 
-std::unique_ptr<u8[]> CompileShaders(ShaderFileInfo info, const char* file_path) {
+std::unique_ptr<u8[]> CompileShaders(ShaderFileInfo info, const char* file_path, Zetta::util::vector<std::wstring>& extra_args) {
 	std::filesystem::path full_path{ file_path };
 	full_path += info.file;
 	if (!std::filesystem::exists(full_path)) return {};
@@ -222,7 +223,7 @@ std::unique_ptr<u8[]> CompileShaders(ShaderFileInfo info, const char* file_path)
 	// NOTE: According to marcelolr (https://github.com/Microsoft/DirectXShaderCompiler/issues/79)
 	//		 "... creating compiler instances is pretty cheap, so it's probably not worth the hassle of caching / sarding them."
 	ShaderCompiler compiler{};
-	DXCCompiledShader compiled_shader{ compiler.Compile(info, full_path) };
+	DXCCompiledShader compiled_shader{ compiler.Compile(info, full_path, extra_args) };
 
 	if (compiled_shader.byte_code && compiled_shader.byte_code->GetBufferPointer() && compiled_shader.byte_code->GetBufferSize()) {
 		static_assert(Content::CompiledShader::hash_length == _countof(DxcShaderHash::HashDigest));
@@ -252,8 +253,15 @@ bool CompileShaders() {
 		full_path = shaders_source_path;
 		full_path += file.info.file;
 		if (!std::filesystem::exists(full_path)) return false;
+		util::vector<std::wstring> extra_args{};
 
-		DXCCompiledShader compiled_shader{ compiler.Compile(file.info, full_path) };
+		if (file.id == EngineShader::GridFrustumCS || file.id == EngineShader::CullLightsCS) {
+			// TODO: Get TILE_SIZE value from D3D12
+			extra_args.emplace_back(L"-D");
+			extra_args.emplace_back(L"TILE_SIZE=16");
+		}
+
+		DXCCompiledShader compiled_shader{ compiler.Compile(file.info, full_path, extra_args) };
 		if (compiled_shader.byte_code && compiled_shader.byte_code->GetBufferSize() && compiled_shader.byte_code->GetBufferPointer())
 			shaders.emplace_back(std::move(compiled_shader));
 		else return false;
