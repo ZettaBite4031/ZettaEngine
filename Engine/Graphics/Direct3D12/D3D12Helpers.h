@@ -429,8 +429,8 @@ namespace Zetta::Graphics::D3D12::D3DX {
 		D3D12PipelineStateSubobjectMS					MS{};
 	};
 
-	ID3D12PipelineState* CreatePipelineState(D3D12_PIPELINE_STATE_STREAM_DESC desc);
-	ID3D12PipelineState* CreatePipelineState(void* stream, u64 size);
+	HRESULT CreatePipelineState(D3D12_PIPELINE_STATE_STREAM_DESC desc, ID3D12PipelineState** pso);
+	HRESULT CreatePipelineState(void* stream, u64 size, ID3D12PipelineState** pso);
 
 	ID3D12Resource* CreateBuffer(const void* data, u32 size, bool is_cpu_accessible = false,
 								D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON,

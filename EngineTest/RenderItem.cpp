@@ -62,7 +62,7 @@ namespace {
 			extra_args.clear();
 			extra_args.emplace_back(L"-D");
 			extra_args.emplace_back(defines[i]);
-			vertex_shaders.emplace_back(std::move(CompileShaders(info, shader_path, extra_args)));
+			vertex_shaders.emplace_back(std::move(CompileShadersSM66(info, shader_path, extra_args)));
 			assert(vertex_shaders.back().get());
 			vertex_shader_pointers.emplace_back(vertex_shaders.back().get());
 		}
@@ -71,7 +71,7 @@ namespace {
 		info.function = "TestShaderPS";
 		info.type = ShaderType::pixel;
 
-		auto pixel_shader = CompileShaders(info, shader_path, extra_args);
+		auto pixel_shader = CompileShadersSM66(info, shader_path, extra_args);
 		assert(pixel_shader.get());
 
 		vs_id = Content::AddShaderGroup(vertex_shader_pointers.data(), (u32)vertex_shader_pointers.size(), keys.data());

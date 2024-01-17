@@ -24,6 +24,8 @@ namespace Zetta::Graphics {
 		} Camera;
 
 		struct {
+			void(*CreateLightSet)(u64);
+			void(*RemoveLightSet)(u64);
 			Light(*Create)(LightInitInfo);
 			void(*Remove)(LightID, u64);
 			void(*SetParameter)(LightID, u64, LightParameter::Parameter, const void* const, u32);

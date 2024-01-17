@@ -83,7 +83,7 @@ namespace Editor.Editors
 	{
 		public ObservableCollection<MeshRendererVertexData> Meshes { get; } = new ObservableCollection<MeshRendererVertexData> ();
 
-		private Vector3D _CameraDirection = new Vector3D(0, 0, -10);
+		private Vector3D _CameraDirection = new(0, 0, -10);
 		public Vector3D CameraDirection
 		{
 			get => _CameraDirection;
@@ -97,7 +97,7 @@ namespace Editor.Editors
 			}
 		}
 
-		private Point3D _CameraPosition = new Point3D(0, 0, 10);
+		private Point3D _CameraPosition = new(0, 0, 10);
 		public Point3D CameraPosition
 		{
 			get => _CameraPosition;
@@ -113,7 +113,7 @@ namespace Editor.Editors
 			}
 		}
 
-		private Point3D _CameraTarget = new Point3D(0, 0, 0);
+		private Point3D _CameraTarget = new(0, 0, 0);
 		public Point3D CameraTarget
 		{
 			get => _CameraTarget;
@@ -129,7 +129,7 @@ namespace Editor.Editors
 		}
 
 		public Point3D OffsetCameraPosition =>
-			new Point3D(CameraPosition.X + CameraTarget.X, CameraPosition.Y + CameraTarget.Y, CameraPosition.Z + CameraTarget.Z);
+			new(CameraPosition.X + CameraTarget.X, CameraPosition.Y + CameraTarget.Y, CameraPosition.Z + CameraTarget.Z);
 
 		private Color _KeyLight = (Color)ColorConverter.ConvertFromString("#ffaeaeae");
 		public Color KeyLight
@@ -194,7 +194,7 @@ namespace Editor.Editors
 
 			double minX, minY, minZ; minX = minY = minZ = double.MaxValue;
 			double maxX, maxY, maxZ; maxX = maxY = maxZ = double.MinValue;
-			Vector3D avgNormal = new Vector3D();
+			Vector3D avgNormal = new();
 
 			var intervals = 2.0f / ((1 << 16) - 1);
 			foreach (var mesh in lod.Meshes)

@@ -80,6 +80,7 @@ void DestroyRenderItems();
 
 void GenerateLights();
 void RemoveLights();
+void TestLights(f32);
 
 
 void GetRenderItems(ID::ID_Type* items, u32 count);
@@ -205,7 +206,7 @@ bool ReadFile(std::filesystem::path path, std::unique_ptr<u8[]>& data, u64& size
 }
 
 bool TestInitialize() {
-	while (!CompileShaders()) {
+	while (!CompileShadersSM66()) {
 		if (MessageBox(nullptr, L"Failed to compile engine shaders.", L"Shader Compilation Error", MB_RETRYCANCEL) != IDRETRY)
 			return false;
 	}
@@ -297,8 +298,10 @@ void EngineTest::Run()  {
 	//if ((counter % 90) == 0) light_set_key = (light_set_key + 1) % 2;
 
 	timer.Begin();
-	std::this_thread::sleep_for(std::chrono::milliseconds(10));
-	Script::Update(timer.AvgDT());
+	//std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	const f32 dt{ timer.AvgDT() };
+	Script::Update(dt);
+	//TestLights(dt);
 	for (u32 i{ 0 }; i < _countof(_surfaces); i++)
 		if (_surfaces[i].surface.surface.IsValid()) {
 			f32 thresholds[3]{ };
@@ -310,7 +313,7 @@ void EngineTest::Run()  {
 			info.render_item_ids = &render_items[0];
 			info.render_item_count = 3;
 			info.thresholds = &thresholds[0];
-			info.average_frame_time = timer.AvgDT();
+			info.average_frame_time = dt;
 			info.light_set_key = light_set_key;
 			info.camera_id = _surfaces[i].camera.GetID();
 

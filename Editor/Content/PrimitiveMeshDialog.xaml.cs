@@ -20,7 +20,7 @@ namespace Editor.Content
     /// </summary>
     public partial class PrimitiveMeshDialog : Window
     {
-        private static readonly List<ImageBrush> _textures = new List<ImageBrush>();    
+        private static readonly List<ImageBrush> _textures = new();    
 
         private void OnPrimitiveType_ComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdatePrimitive();
 
@@ -99,9 +99,11 @@ namespace Editor.Content
                 var data = reader.ReadBytes((int)resource.Stream.Length);
                 var imageSource = (BitmapSource)new ImageSourceConverter().ConvertFrom(data);
                 imageSource.Freeze();
-                var brush = new ImageBrush(imageSource);
-                brush.Transform = new ScaleTransform(1, -1, 0.5, 0.5);
-                brush.ViewportUnits = BrushMappingMode.Absolute;
+                var brush = new ImageBrush(imageSource)
+                {
+                    Transform = new ScaleTransform(1, -1, 0.5, 0.5),
+                    ViewportUnits = BrushMappingMode.Absolute
+                };
                 brush.Freeze();
                 _textures.Add(brush);
             }

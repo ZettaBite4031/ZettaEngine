@@ -15,6 +15,7 @@ namespace Zetta::Graphics::D3D12::DeLight {
 				FrustumsOutOrIndexCounter,
 				FrustumsIn,
 				CullingInfo,
+				BoundingSpheres,
 				LightGridOpaque,
 				LightIndexListOpaque,
 
@@ -25,7 +26,7 @@ namespace Zetta::Graphics::D3D12::DeLight {
 		struct CullingParameters {
 			D3D12Buffer								frustums;
 			D3D12Buffer								light_grid_and_index_list;
-			StructuredBuffer						light_index_counter;
+			UAV_ClearableBuffer						light_index_counter;
 			HLSL::LightCullingDispatchParameters	grid_frustums_dispatch_params{};
 			HLSL::LightCullingDispatchParameters	light_culling_dispatch_params{};
 			u32										frustum_count{ 0 };
@@ -51,6 +52,7 @@ namespace Zetta::Graphics::D3D12::DeLight {
 
 		bool CreateRootSignature() {
 			assert(!light_culling_root_signature);
+
 			using param = LightCullingRootParameter;
 			D3DX::D3D12RootParameter params[param::count]{};
 			params[param::GlobalShaderData].AsCBV(D3D12_SHADER_VISIBILITY_ALL, 0);
@@ -58,6 +60,7 @@ namespace Zetta::Graphics::D3D12::DeLight {
 			params[param::FrustumsOutOrIndexCounter].AsUAV(D3D12_SHADER_VISIBILITY_ALL, 0);
 			params[param::FrustumsIn].AsSRV(D3D12_SHADER_VISIBILITY_ALL, 0);
 			params[param::CullingInfo].AsSRV(D3D12_SHADER_VISIBILITY_ALL, 1);
+			params[param::BoundingSpheres].AsSRV(D3D12_SHADER_VISIBILITY_ALL, 2);
 			params[param::LightGridOpaque].AsUAV(D3D12_SHADER_VISIBILITY_ALL, 1);
 			params[param::LightIndexListOpaque].AsUAV(D3D12_SHADER_VISIBILITY_ALL, 3);
 
@@ -73,7 +76,7 @@ namespace Zetta::Graphics::D3D12::DeLight {
 					D3DX::D3D12PipelineStateSubobjectRootSignature root_signature{ light_culling_root_signature };
 					D3DX::D3D12PipelineStateSubobjectCS cs{ Shaders::GetEngineShader(Shaders::EngineShader::GridFrustumCS) };
 				} stream;
-				grid_frustum_pso = D3DX::CreatePipelineState(&stream, sizeof(stream));
+				DXCall(D3DX::CreatePipelineState(&stream, sizeof(stream), &grid_frustum_pso));
 				NAME_D3D12_OBJECT(grid_frustum_pso, L"Grid Frustum PSO");
 			}
 			{
@@ -82,7 +85,7 @@ namespace Zetta::Graphics::D3D12::DeLight {
 					D3DX::D3D12PipelineStateSubobjectRootSignature root_signature{ light_culling_root_signature };
 					D3DX::D3D12PipelineStateSubobjectCS cs{ Shaders::GetEngineShader(Shaders::EngineShader::CullLightsCS) };
 				} stream;
-				light_culling_pso = D3DX::CreatePipelineState(&stream, sizeof(stream));
+				DXCall(D3DX::CreatePipelineState(&stream, sizeof(stream), &light_culling_pso));
 				NAME_D3D12_OBJECT(light_culling_pso, L"Light Culling PSO");
 			}
 			return grid_frustum_pso != nullptr && light_culling_pso != nullptr;
@@ -91,17 +94,17 @@ namespace Zetta::Graphics::D3D12::DeLight {
 		void ResizeBuffers(CullingParameters& culler) {
 			const u32 frustum_count{ culler.frustum_count };
 
-			const u32 frustum_buffer_size{ sizeof(HLSL::Frustum) * frustum_count };
+			const u32 frustums_buffer_size{ sizeof(HLSL::Frustum) * frustum_count };
 			const u32 light_grid_buffer_size{ (u32)Math::AlignSizeUp<sizeof(Math::v4)>(sizeof(Math::u32v2) * frustum_count) };
-			const u32 light_index_buffer_size{ (u32)Math::AlignSizeUp<sizeof(Math::v4)>(sizeof(u32) * max_lights_per_tile * frustum_count) };
-			const u32 light_grid_and_index_list_buffer_size{ light_grid_buffer_size + light_index_buffer_size };
+			const u32 light_index_list_buffer_size{ (u32)Math::AlignSizeUp<sizeof(Math::v4)>(sizeof(u32) * max_lights_per_tile * frustum_count) };
+			const u32 light_grid_and_index_list_buffer_size{ light_grid_buffer_size + light_index_list_buffer_size };
 
 			D3D12BufferInitInfo info{};
 			info.alignment = sizeof(Math::v4);
 			info.flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-			if (frustum_buffer_size > culler.frustums.Size()) {
-				info.size = frustum_buffer_size;
+			if (frustums_buffer_size > culler.frustums.Size()) {
+				info.size = frustums_buffer_size;
 				culler.frustums = D3D12Buffer{ info, false };
 				NAME_D3D12_OBJECT_INDEXED(culler.frustums.Buffer(), frustum_count, L"Light Grid Frustums Buffer - count");
 			}
@@ -116,9 +119,8 @@ namespace Zetta::Graphics::D3D12::DeLight {
 					L"Light Grid and Index List Buffer - size");
 
 				if (!culler.light_index_counter.Buffer()) {
-					info = StructuredBuffer::GetDefaultInitInfo(sizeof(Math::u32v4), 1);
-					info.create_uav = true;
-					culler.light_index_counter = StructuredBuffer{ info };
+					info = UAV_ClearableBuffer::GetDefaultInitInfo(1);
+					culler.light_index_counter = UAV_ClearableBuffer{ info };
 					NAME_D3D12_OBJECT_INDEXED(culler.light_index_counter.Buffer(), Core::CurrentFrameIndex(), L"Light Index Counter Buffer");
 				}
 			}
@@ -254,6 +256,7 @@ namespace Zetta::Graphics::D3D12::DeLight {
 		cmd_list->SetComputeRootUnorderedAccessView(param::FrustumsOutOrIndexCounter, culler.light_index_counter.GPU_Address());
 		cmd_list->SetComputeRootShaderResourceView(param::FrustumsIn, culler.frustums.GPU_Address());
 		cmd_list->SetComputeRootShaderResourceView(param::CullingInfo, Light::CullingInfoBuffer(d3d12_info.frame_index));
+		cmd_list->SetComputeRootShaderResourceView(param::BoundingSpheres, Light::BoundingSphereBuffer(d3d12_info.frame_index));
 		cmd_list->SetComputeRootUnorderedAccessView(param::LightGridOpaque, culler.light_grid_and_index_list.GPU_Address());
 		cmd_list->SetComputeRootUnorderedAccessView(param::LightIndexListOpaque, culler.light_index_list_opaque_buffer);
 

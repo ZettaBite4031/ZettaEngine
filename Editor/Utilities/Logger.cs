@@ -38,7 +38,7 @@ namespace Editor.Utilities
     static class Logger
     {
         public static int _messageFilter = (int)(MessageType.Info | MessageType.Warn | MessageType.Error);
-        private readonly static ObservableCollection<LogMessage> _messages = new ObservableCollection<LogMessage>();
+        private readonly static ObservableCollection<LogMessage> _messages = new();
         public static ReadOnlyObservableCollection<LogMessage> Messages { get; } = new ReadOnlyObservableCollection<LogMessage>(_messages);
         public static CollectionViewSource FilteredMessages { get; } = new CollectionViewSource() { Source = Messages };
 

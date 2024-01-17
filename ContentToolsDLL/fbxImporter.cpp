@@ -96,22 +96,21 @@ namespace Zetta::Tools {
 	void FBXContext::GetMesh(FbxNodeAttribute* attribute, util::vector<Mesh>& meshes, u32 lod_id, f32 lod_threshold) {
 		assert(attribute);
 
-		if (FbxMesh * fbx_mesh{ (FbxMesh*)attribute }) {
-			if (fbx_mesh->RemoveBadPolygons() < 0) return;
+		FbxMesh* fbx_mesh{ (FbxMesh*)attribute };
+		if (fbx_mesh->RemoveBadPolygons() < 0) return;
 
-			FbxGeometryConverter gc{ _fbx_manager };
-			fbx_mesh = (FbxMesh*)gc.Triangulate(fbx_mesh, true);
-			if (!fbx_mesh || fbx_mesh->RemoveBadPolygons() < 0) return;
+		FbxGeometryConverter gc{ _fbx_manager };
+		fbx_mesh = (FbxMesh*)gc.Triangulate(fbx_mesh, true);
+		if (!fbx_mesh || fbx_mesh->RemoveBadPolygons() < 0) return;
 
-			FbxNode* const node{ fbx_mesh->GetNode() };
+		FbxNode* const node{ fbx_mesh->GetNode() };
 
-			Mesh m;
-			m.lod_id = lod_id;
-			m.lod_threshold = lod_threshold;
-			m.name = (node->GetName()[0] != '\0') ? node->GetName() : fbx_mesh->GetName();
+		Mesh m;
+		m.lod_id = lod_id;
+		m.lod_threshold = lod_threshold;
+		m.name = (node->GetName()[0] != '\0') ? node->GetName() : fbx_mesh->GetName();
 
-			if (GetMeshData(fbx_mesh, m)) meshes.emplace_back(m);
-		}
+		if (GetMeshData(fbx_mesh, m)) meshes.emplace_back(m);
 	}
 
 	void FBXContext::GetLODGroup(FbxNodeAttribute* attribute) {

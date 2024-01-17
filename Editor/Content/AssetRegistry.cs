@@ -14,9 +14,9 @@ namespace Editor.Content
 {
     static class AssetRegistry
     {
-        private static readonly DelayEventTimer _refreshTimer = new DelayEventTimer(TimeSpan.FromMilliseconds(250));
-        private static readonly Dictionary<string, AssetInfo> _assetDictionary = new Dictionary<string, AssetInfo>();
-        private static readonly ObservableCollection<AssetInfo> _assets = new ObservableCollection<AssetInfo>();
+        private static readonly DelayEventTimer _refreshTimer = new(TimeSpan.FromMilliseconds(250));
+        private static readonly Dictionary<string, AssetInfo> _assetDictionary = new();
+        private static readonly ObservableCollection<AssetInfo> _assets = new();
         public static ReadOnlyObservableCollection<AssetInfo> Assets { get; } = new ReadOnlyObservableCollection<AssetInfo>(_assets);
 
         private static void RegisterAllAssets(string path)

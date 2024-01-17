@@ -6,7 +6,7 @@ namespace Zetta::Graphics::D3D12 {
 }
 
 namespace Zetta::Graphics::D3D12::DeLight {
-	constexpr u32 light_culling_tile_size{ 16 };
+	constexpr u32 light_culling_tile_size{ 32 };
 
 	bool Initialize();
 	void Shutdown();

@@ -40,7 +40,7 @@ namespace Zetta::util {
 			assert(this != std::addressof(o));
 			if (this != std::addressof(o)) {
 				Destroy();
-				Move();
+				Move(o);
 			}
 
 			return *this;

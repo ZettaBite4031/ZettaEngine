@@ -66,7 +66,7 @@ namespace Editor.GameProject
         }
 
         [DataMember(Name = nameof(Scenes))]
-        private ObservableCollection<Scene> _scenes = new ObservableCollection<Scene>();
+        private ObservableCollection<Scene> _scenes = new();
         public ReadOnlyObservableCollection<Scene> Scenes { get; private set; }
 
         private Scene _ActiveScene;

@@ -20,13 +20,18 @@ namespace Editor.Content
         Texture,
     }
 
+    interface IAssetImportSettings
+    {
+        void ToBinary(BinaryWriter writer);
+        void FromBinary(BinaryReader reader);
+    }
+
     sealed class AssetInfo
     {
         public AssetType Type { get; set; }
         public byte[] Icon { get; set; }
         public string FullPath { get; set; }
         public string FileName => Path.GetFileNameWithoutExtension(FullPath);
-        public string SourcePath { get; set; }
         public DateTime RegisterTime { get; set; }
         public DateTime ImportDate { get; set; }
         public Guid Guid { get; set; }
@@ -60,23 +65,23 @@ namespace Editor.Content
         }
         public string FileName => Path.GetFileNameWithoutExtension(FullPath);
 
-        public abstract void Import(string file);
-        public abstract void Load(string file);
+        public abstract bool Import(string file);
+        public abstract bool Load(string file);
         public abstract IEnumerable<string> Save(string path);
         public abstract byte[] PackForEngine();
 
         private static AssetInfo GetAssetInfo(BinaryReader reader)
         {
             reader.BaseStream.Position = 0;
-            var info = new AssetInfo();
-
-            info.Type = (AssetType)reader.ReadInt32();
+            var info = new AssetInfo
+            {
+                Type = (AssetType)reader.ReadInt32()
+            };
             var idSize = reader.ReadInt32();
             info.Guid = new Guid(reader.ReadBytes(idSize));
             info.ImportDate = DateTime.FromBinary(reader.ReadInt64());
             var hashSize = reader.ReadInt32();
             if (hashSize > 0) info.Hash = reader.ReadBytes(hashSize);
-            info.SourcePath = reader.ReadString();
             var iconSize = reader.ReadInt32();
             info.Icon = reader.ReadBytes(iconSize);
             return info;
@@ -118,7 +123,6 @@ namespace Editor.Content
             }
             else writer.Write(0);
 
-            writer.Write(SourcePath ?? "");
             writer.Write(Icon.Length);
             writer.Write(Icon);
         }
@@ -131,7 +135,6 @@ namespace Editor.Content
             Guid = info.Guid;
             importDate = info.ImportDate;
             Hash = info.Hash;
-            SourcePath = info.SourcePath;
             Icon = info.Icon;
         }
 

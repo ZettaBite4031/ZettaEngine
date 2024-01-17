@@ -45,20 +45,26 @@ namespace Zetta::Graphics::D3D12::D3DX {
 		return signature;
 	}
 
-	ID3D12PipelineState* CreatePipelineState(D3D12_PIPELINE_STATE_STREAM_DESC desc) {
+	HRESULT CreatePipelineState(D3D12_PIPELINE_STATE_STREAM_DESC desc, ID3D12PipelineState** pso) {
 		assert(desc.pPipelineStateSubobjectStream && desc.SizeInBytes);
-		ID3D12PipelineState* pso{ nullptr };
-		DXCall(Core::Device()->CreatePipelineState(&desc, IID_PPV_ARGS(&pso)));
-		assert(pso);
-		return pso;
+		try {
+			Core::Device()->CreatePipelineState(&desc, IID_PPV_ARGS(pso));
+			assert(*pso);
+		}
+		catch (std::exception e) {
+			return 69;
+		}
+
+		return S_OK;
 	}
 
-	ID3D12PipelineState* CreatePipelineState(void* stream, u64 size) {
+	HRESULT CreatePipelineState(void* stream, u64 size, ID3D12PipelineState** pso) {
 		assert(stream && size);
 		D3D12_PIPELINE_STATE_STREAM_DESC desc{};
 		desc.SizeInBytes = size;
 		desc.pPipelineStateSubobjectStream = stream;
-		return CreatePipelineState(desc);
+		CreatePipelineState(desc, pso);
+		return S_OK;
 	}
 
 	ID3D12Resource* CreateBuffer(const void* data, u32 size, bool is_cpu_accessible,

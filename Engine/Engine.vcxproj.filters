@@ -45,6 +45,7 @@
     <ClInclude Include="Input\Input.h" />
     <ClInclude Include="Input\InputWin32.h" />
     <ClInclude Include="Graphics\Direct3D12\D3D12LightCulling.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanValdiation.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Components\Entity.cpp" />

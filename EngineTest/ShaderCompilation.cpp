@@ -33,7 +33,7 @@ namespace {
 
 	static_assert(_countof(engine_shader_files) == EngineShader::count);
 
-	constexpr const char* shaders_source_path{ "../../Engine/Graphics/Direct3D12/Shaders/" };
+	constexpr const char* shaders_source_pathSM66{ "../../Engine/Graphics/Direct3D12/Shaders/" };
 
 	struct DXCCompiledShader {
 		ComPtr<IDxcBlob> byte_code;
@@ -60,7 +60,7 @@ namespace {
 
 		DISABLE_COPY_AND_MOVE(ShaderCompiler);
 
-		DXCCompiledShader Compile(ShaderFileInfo info, std::filesystem::path full_path, util::vector<std::wstring>& extra_args) {
+		DXCCompiledShader CompileSM66(ShaderFileInfo info, std::filesystem::path full_path, util::vector<std::wstring>& extra_args) {
 			assert(_compiler && _utils && _include_handler);
 			HRESULT hr{ S_OK };
 
@@ -70,15 +70,13 @@ namespace {
 			if (FAILED(hr)) return {};
 			assert(source_blob && source_blob->GetBufferSize());
 
-
-
 			OutputDebugStringA("Compiling ");
 			OutputDebugStringA(info.file);
 			OutputDebugStringA(" : ");
 			OutputDebugStringA(info.function);
 			OutputDebugStringA("\n");
 
-			return Compile(source_blob.Get(), GetArgs(info, extra_args));
+			return Compile(source_blob.Get(), GetArgsSM66(info, extra_args));
 		}
 
 		DXCCompiledShader Compile(IDxcBlobEncoding* source_blob, util::vector<std::wstring> compiler_args) {
@@ -143,7 +141,7 @@ namespace {
 		}
 
 	private:
-		util::vector<std::wstring> GetArgs(const ShaderFileInfo info, util::vector<std::wstring>& extra_args) {
+		util::vector<std::wstring> GetArgsSM66(const ShaderFileInfo info, util::vector<std::wstring>& extra_args) {
 			util::vector<std::wstring> args{};
 
 			args.emplace_back(ToWString(info.file));
@@ -152,7 +150,7 @@ namespace {
 			args.emplace_back(L"-T");
 			args.emplace_back(ToWString(_profile_strings[(u32)info.type]));
 			args.emplace_back(L"-I");
-			args.emplace_back(ToWString(shaders_source_path));
+			args.emplace_back(ToWString(shaders_source_pathSM66));
 			args.emplace_back(L"-enable-16bit-types");
 			args.emplace_back(DXC_ARG_ALL_RESOURCES_BOUND);
 #ifdef _DEBUG
@@ -188,11 +186,8 @@ namespace {
 		if (!std::filesystem::exists(engine_shaders_path)) return false;
 		auto shaders_compilation_time = std::filesystem::last_write_time(engine_shaders_path);
 
-		for (const auto& entry : std::filesystem::directory_iterator{ shaders_source_path }) {
-			if (entry.last_write_time() > shaders_compilation_time) {
-				return false;
-			}
-		}
+		for (const auto& entry : std::filesystem::directory_iterator{ shaders_source_pathSM66 }) 
+			if (entry.last_write_time() > shaders_compilation_time) return false;
 		
 		return true;
 	}
@@ -215,7 +210,7 @@ namespace {
 	}
 }
 
-std::unique_ptr<u8[]> CompileShaders(ShaderFileInfo info, const char* file_path, Zetta::util::vector<std::wstring>& extra_args) {
+std::unique_ptr<u8[]> CompileShadersSM66(ShaderFileInfo info, const char* file_path, Zetta::util::vector<std::wstring>& extra_args) {
 	std::filesystem::path full_path{ file_path };
 	full_path += info.file;
 	if (!std::filesystem::exists(full_path)) return {};
@@ -223,7 +218,7 @@ std::unique_ptr<u8[]> CompileShaders(ShaderFileInfo info, const char* file_path,
 	// NOTE: According to marcelolr (https://github.com/Microsoft/DirectXShaderCompiler/issues/79)
 	//		 "... creating compiler instances is pretty cheap, so it's probably not worth the hassle of caching / sarding them."
 	ShaderCompiler compiler{};
-	DXCCompiledShader compiled_shader{ compiler.Compile(info, full_path, extra_args) };
+	DXCCompiledShader compiled_shader{ compiler.CompileSM66(info, full_path, extra_args) };
 
 	if (compiled_shader.byte_code && compiled_shader.byte_code->GetBufferPointer() && compiled_shader.byte_code->GetBufferSize()) {
 		static_assert(Content::CompiledShader::hash_length == _countof(DxcShaderHash::HashDigest));
@@ -240,7 +235,7 @@ std::unique_ptr<u8[]> CompileShaders(ShaderFileInfo info, const char* file_path,
 	return {};
 }
 
-bool CompileShaders() {
+bool CompileShadersSM66() {
 	if (CompiledShadersUpToDate()) return true;
 
 	ShaderCompiler compiler{};
@@ -250,7 +245,7 @@ bool CompileShaders() {
 	for (u32 i{ 0 }; i < EngineShader::count; i++) {
 		auto& file = engine_shader_files[i];
 
-		full_path = shaders_source_path;
+		full_path = shaders_source_pathSM66;
 		full_path += file.info.file;
 		if (!std::filesystem::exists(full_path)) return false;
 		util::vector<std::wstring> extra_args{};
@@ -258,10 +253,10 @@ bool CompileShaders() {
 		if (file.id == EngineShader::GridFrustumCS || file.id == EngineShader::CullLightsCS) {
 			// TODO: Get TILE_SIZE value from D3D12
 			extra_args.emplace_back(L"-D");
-			extra_args.emplace_back(L"TILE_SIZE=16");
+			extra_args.emplace_back(L"TILE_SIZE=32");
 		}
 
-		DXCCompiledShader compiled_shader{ compiler.Compile(file.info, full_path, extra_args) };
+		DXCCompiledShader compiled_shader{ compiler.CompileSM66(file.info, full_path, extra_args) };
 		if (compiled_shader.byte_code && compiled_shader.byte_code->GetBufferSize() && compiled_shader.byte_code->GetBufferPointer())
 			shaders.emplace_back(std::move(compiled_shader));
 		else return false;

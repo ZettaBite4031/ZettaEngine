@@ -15,7 +15,13 @@ namespace Zetta::Graphics {
 		bool SetPlatformInterface(GraphicsPlatform platform, PlatformInterface& pi) {
 			switch (platform) {
 			case GraphicsPlatform::Direct3D12:
+#if defined(_WIN64)
 				D3D12::GetPlatformInterface(pi);
+#else
+				return false;
+#endif
+				break;
+			case GraphicsPlatform::Vulkan:
 				break;
 			default:
 				return false;
@@ -302,6 +308,14 @@ namespace Zetta::Graphics {
 		return id;
 	}
 
+	void CreateLightSet(u64 key) {
+		gfx.Light.CreateLightSet(key);
+	}
+
+	void RemoveLightSet(u64 key) {
+		gfx.Light.RemoveLightSet(key);
+	}
+	
 	Light CreateLight(LightInitInfo info) {
 		return gfx.Light.Create(info);
 	}

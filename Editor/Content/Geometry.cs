@@ -45,7 +45,7 @@ namespace Editor.Content
 
 	class Mesh : ViewModelBase
 	{
-		public static int PositionSize = sizeof(float) * 3;
+		public static int PositionSize => sizeof(float) * 3;
 
 		private int _ElementSize;
 		public int ElementSize
@@ -179,7 +179,7 @@ namespace Editor.Content
 		public ObservableCollection<MeshLOD> LODs { get; } = new ObservableCollection<MeshLOD>();
 	}
 
-	class GeometryImportSettings : ViewModelBase
+	class GeometryImportSettings : ViewModelBase, IAssetImportSettings
 	{
 		private float _SmoothingAngle;
 		public float SmoothingAngle
@@ -298,8 +298,8 @@ namespace Editor.Content
 
 	class Geometry : Asset
 	{
-		private readonly object _lock = new object();
-		private readonly List<LODGroup> _lodGroups = new List<LODGroup>();
+		private readonly object _lock = new();
+		private readonly List<LODGroup> _lodGroups = new();
 
 		public GeometryImportSettings ImportSettings { get; } = new GeometryImportSettings();
 
@@ -400,31 +400,20 @@ namespace Editor.Content
 			lod.Meshes.Add(mesh);
 		}
 
-		public override void Import(string file)
+		public override bool Import(string file)
 		{
 			Debug.Assert(File.Exists(file));
 			Debug.Assert(!string.IsNullOrEmpty(FullPath));
 			var ext = Path.GetExtension(file).ToLower();
-
-			SourcePath = file;
-			try
-			{
-				if (ext == ".fbx") ImportFBX(file);
-			}
-			catch (Exception ex)
-			{
-				Debug.WriteLine(ex.Message);
-				var msg = $"Failed to read {file} for import.";
-				Debug.WriteLine(msg);
-				Logger.Log(MessageType.Error, msg);
-			}
+			if (ext == ".fbx") return ImportFBX(file);
+			return false;
 		}
 
-		private void ImportFBX(string file)
+		private bool ImportFBX(string file)
 		{
 			Logger.Log(MessageType.Info, $"Importing FBX file {file}");
 			var tempPath = Application.Current.Dispatcher.Invoke(() => Project.Current.TempFolder);
-			if (string.IsNullOrEmpty(tempPath)) return;
+			if (string.IsNullOrEmpty(tempPath)) return false;
 
 			lock (_lock)
 			{
@@ -433,10 +422,29 @@ namespace Editor.Content
 
 			var tempFile = $"{tempPath}{ContentHelper.GetRandomString()}.fbx";
 			File.Copy(file, tempFile, true);
-			ContentToolsAPI.ImportFBX(tempFile, this);
+			bool res = false;
+			try
+			{
+				ContentToolsAPI.ImportFBX(tempFile, this);
+				res = true;
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine(ex.Message);
+				string msg = $"Failed to import {file}";
+				Debug.WriteLine(msg);
+				Logger.Log(MessageType.Error, msg);
+			}
+
+			if (ImportSettings.ImportEmbededTextures)
+			{
+
+			}
+
+			return res;
 		}
 
-		public override void Load(string file)
+		public override bool Load(string file)
 		{
 			Debug.Assert(File.Exists(file));
 			Debug.Assert(Path.GetExtension(file).ToLower() == AssetFileExtension);
@@ -457,9 +465,11 @@ namespace Editor.Content
 
 				using (var reader = new BinaryReader(new MemoryStream(data)))
 				{
-					LODGroup lodGroup = new LODGroup();
-					lodGroup.Name = reader.ReadString();
-					var lodGroupCount = reader.ReadInt32();
+                    LODGroup lodGroup = new()
+                    {
+                        Name = reader.ReadString()
+                    };
+                    var lodGroupCount = reader.ReadInt32();
 
 					for (int i = 0; i < lodGroupCount; i++)
 						lodGroup.LODs.Add(BinaryToLOD(reader));
@@ -470,14 +480,18 @@ namespace Editor.Content
 				}
 
 				// For Testing. Remove Later!!1!11!111!!!
-				PackForEngine();
+				// PackForEngine();
 				// For Testing. Remove Later!!1!11!111!!!
+
+				return true;
 			}
 			catch (Exception ex)
 			{
 				Debug.WriteLine(ex.Message);
 				Logger.Log(MessageType.Error, $"Failed to load geometry asset from file: {file}");
 			}
+
+			return false;
 		}
 
 		public override IEnumerable<string> Save(string file)
@@ -527,6 +541,8 @@ namespace Editor.Content
 					Logger.Log(MessageType.Info, $"Saved geometry to {meshFileName}");
 					savedFiles.Add(meshFileName);
 				}
+
+				FullPath = file;
 			}
 			catch (Exception ex)
 			{
@@ -619,9 +635,11 @@ namespace Editor.Content
 		private MeshLOD BinaryToLOD(BinaryReader reader)
 		{
 			var lod = new MeshLOD();
+
 			lod.Name = reader.ReadString();
 			lod.LODThreshold = reader.ReadSingle();
-			var meshCount = reader.ReadInt32();
+            
+            var meshCount = reader.ReadInt32();
 
 			for (int i = 0; i < meshCount; i++)
 			{
@@ -646,26 +664,19 @@ namespace Editor.Content
 			return lod;
 		}
 
-		private byte[] GenerateIcon(MeshLOD lod)
+		private static byte[] GenerateIcon(MeshLOD lod)
 		{
 			var width = ContentInfo.IconWidth * 4;
-
-			using var memStream = new MemoryStream();
-			BitmapSource bmp = null;
-
+			byte[] icon = null;
+			// NOTE: It's not good practice to use a WPF control (view) in the ViewModel.
+			//		 But as there isn't a renderer, a screenshot cannot be made.
 			Application.Current.Dispatcher.Invoke(() =>
 			{
-				bmp = Editors.GeometryView.RenderToBitmap(new Editors.MeshRenderer(lod, null), width, width);
-				bmp = new TransformedBitmap(bmp, new ScaleTransform(0.25, 0.25, 0.5, 0.5));
-
-				memStream.SetLength(0);
-
-				var encoder = new PngBitmapEncoder();
-				encoder.Frames.Add(BitmapFrame.Create(bmp));
-				encoder.Save(memStream);
+				var bmp = Editors.GeometryView.RenderToBitmap(new Editors.MeshRenderer(lod, null), width, width);
+				icon = BitmapHelper.CreateThumbnail(bmp, ContentInfo.IconWidth, ContentInfo.IconWidth);
 			});
 
-			return memStream.ToArray();
+			return icon;
 		}
 
 		public Geometry() : base(AssetType.Mesh) { }

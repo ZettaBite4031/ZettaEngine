@@ -4,11 +4,16 @@
     <ClCompile Include="MeshPrimitives.cpp" />
     <ClCompile Include="Geometry.cpp" />
     <ClCompile Include="fbxImporter.cpp" />
+    <ClCompile Include="TextureImporter.cpp" />
+    <ClCompile Include="NormalMapIdentification.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ToolsCommon.h" />
     <ClInclude Include="MeshPrimitives.h" />
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="fbxImporter.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

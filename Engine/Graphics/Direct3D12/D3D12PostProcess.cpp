@@ -55,7 +55,7 @@ namespace Zetta::Graphics::D3D12::FX {
 
 			stream.render_target_formats = rtf_array;
 
-			fx_pso = D3DX::CreatePipelineState(&stream, sizeof(stream));
+			DXCall(D3DX::CreatePipelineState(&stream, sizeof(stream), &fx_pso));
 			NAME_D3D12_OBJECT(fx_pso, L"Post-Processing FX Pipeline State Object");
 
 			return fx_root_sig && fx_pso;
@@ -83,7 +83,7 @@ namespace Zetta::Graphics::D3D12::FX {
 		cmd_list->SetGraphicsRoot32BitConstant(idx::RootConstants, GPass::MainBuffer().SRV().index, 0);
 		cmd_list->SetGraphicsRootShaderResourceView(idx::Frustums, DeLight::Frustums(light_culling_id, frame_idx));
 		cmd_list->SetGraphicsRootShaderResourceView(idx::LightGridOpaque, DeLight::LightGridOpaque(light_culling_id, frame_idx));
-		cmd_list->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		cmd_list->OMSetRenderTargets(1, &target_rtv, 1, nullptr);
 		cmd_list->DrawInstanced(3, 1, 0, 0);

@@ -311,7 +311,6 @@ namespace Zetta::Graphics::D3D12::GPass {
 				cmd_list->SetGraphicsRootShaderResourceView(idx::CullableLights, Light::CullableLightBuffer(frame_idx));
 				cmd_list->SetGraphicsRootShaderResourceView(idx::LightGrid, DeLight::LightGridOpaque(light_culling_id, frame_idx));
 				cmd_list->SetGraphicsRootShaderResourceView(idx::LightIndexList, DeLight::LightIndexListOpaque(light_culling_id, frame_idx));
-
 			}
 
 			if (current_pipeline_state != cache.gpass_pipeline_states[i]) {

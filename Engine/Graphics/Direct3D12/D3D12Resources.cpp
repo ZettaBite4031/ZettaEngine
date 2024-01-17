@@ -184,33 +184,30 @@ namespace Zetta::Graphics::D3D12 {
 	}
 #pragma endregion
 
-/* ------------------------------- STRUCTURED BUFFER ------------------------------------------------------------------------- */
-#pragma region Structured Buffer
-	StructuredBuffer::StructuredBuffer(const D3D12BufferInitInfo& info) 
-		: _buffer{ info, false }, _stride{ info.stride } {
-		assert(info.size && info.size == (info.stride * info.element_count));
-		assert(info.alignment > 0);
+/* ------------------------------- UAV CLEARABLE BUFFER ---------------------------------------------------------------------- */
+#pragma region UAV Clearable Buffer
+	UAV_ClearableBuffer::UAV_ClearableBuffer(const D3D12BufferInitInfo& info)
+		: _buffer{ info, false } {
+		assert(info.size && info.alignment);
 		NAME_D3D12_OBJECT_INDEXED(Buffer(), info.size, L"Structured Buffer - size");
 
-		if (info.create_uav) {
-			assert(info.flags && D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-			_uav = Core::UAV_Heap().Alloc();
-			_uav_shader_visible = Core::SRV_Heap().Alloc();
-			D3D12_UNORDERED_ACCESS_VIEW_DESC desc{};
-			desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-			desc.Format = DXGI_FORMAT_UNKNOWN;
-			desc.Buffer.CounterOffsetInBytes = 0;
-			desc.Buffer.FirstElement = 0;
-			desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-			desc.Buffer.NumElements = info.element_count;
-			desc.Buffer.StructureByteStride = info.stride;
+		assert(info.flags && D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+		_uav = Core::UAV_Heap().Alloc();
+		_uav_shader_visible = Core::SRV_Heap().Alloc();
+		D3D12_UNORDERED_ACCESS_VIEW_DESC desc{};
+		desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+		desc.Format = DXGI_FORMAT_R32_UINT;
+		desc.Buffer.CounterOffsetInBytes = 0;
+		desc.Buffer.FirstElement = 0;
+		desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+		desc.Buffer.NumElements = _buffer.Size() / sizeof(u32);
 
-			Core::Device()->CreateUnorderedAccessView(Buffer(), nullptr, &desc, _uav.cpu);
-			Core::Device()->CopyDescriptorsSimple(1, _uav_shader_visible.cpu, _uav.cpu, Core::SRV_Heap().Type());
-		}
+		Core::Device()->CreateUnorderedAccessView(Buffer(), nullptr, &desc, _uav.cpu);
+		Core::Device()->CopyDescriptorsSimple(1, _uav_shader_visible.cpu, _uav.cpu, Core::SRV_Heap().Type());
+		
 	}
 
-	void StructuredBuffer::Release() {
+	void UAV_ClearableBuffer::Release() {
 		Core::SRV_Heap().Free(_uav_shader_visible);
 		Core::UAV_Heap().Free(_uav);
 		_buffer.Release();

@@ -4,6 +4,28 @@ ConstantBuffer<GlobalShaderData>                    GlobalData      : register(b
 ConstantBuffer<LightCullingDispatchParameters>      ShaderParams    : register(b1, space0);
 RWStructuredBuffer<Frustum>                         Frustums        : register(u0, space0);
 
+
+#if USE_BOUNDING_SPHERES
+// NOTE: `TILE_SIZE` is defined by the engine at compile time
+[numthreads(TILE_SIZE, TILE_SIZE, 1)]
+void ComputeGridFrustumsCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    if (DispatchThreadID.x >= ShaderParams.NumThreads.x || DispatchThreadID.y >= ShaderParams.NumThreads.y) return;
+
+    const float2 invViewDimensions = TILE_SIZE / float2(GlobalData.ViewWidth, GlobalData.ViewHeight);
+    const float2 topLeft = DispatchThreadID.xy * invViewDimensions;
+    const float2 center = topLeft + (invViewDimensions * 0.5f);
+
+    float3 topLeftVS = AntiprojectionUV(topLeft, 0, GlobalData.InvProjection).xyz;
+    float3 centerVS = AntiprojectionUV(center, 0, GlobalData.InvProjection).xyz;
+    
+    const float farClipRcp = -GlobalData.InvProjection._m33;
+    Frustum frustum = { normalize(centerVS), distance(centerVS, topLeftVS) * farClipRcp };
+    
+    Frustums[DispatchThreadID.x + (DispatchThreadID.y * ShaderParams.NumThreads.x)] = frustum;
+
+}
+#else
 // NOTE: `TILE_SIZE` is defined by the engine at compile time
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void ComputeGridFrustumsCS(uint3 DispatchThreadID : SV_DispatchThreadID)
@@ -40,3 +62,4 @@ void ComputeGridFrustumsCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     Frustums[x + (y * ShaderParams.NumThreads.x)] = frustum;
 
 }
+#endif

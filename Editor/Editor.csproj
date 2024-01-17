@@ -61,6 +61,7 @@
     <Compile Include="Content\ContentWatcher.cs" />
     <Compile Include="Content\Geometry.cs" />
     <Compile Include="Content\PrimitiveMeshDialog.xaml.cs" />
+    <Compile Include="Content\Texture.cs" />
     <Compile Include="Dictionaries\ControlTemplates.xaml.cs" />
     <Compile Include="DLLWrapper\ContentToolsAPI.cs" />
     <Compile Include="DLLWrapper\EngineAPI.cs" />

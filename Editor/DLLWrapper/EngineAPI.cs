@@ -30,8 +30,8 @@ namespace Editor.EngineAPIStructs
     [StructLayout(LayoutKind.Sequential)]
     class GameEntityDescriptor
     {
-        public TransformComponent Transform = new TransformComponent();
-        public ScriptComponent Script = new ScriptComponent();
+        public TransformComponent Transform = new();
+        public ScriptComponent Script = new();
     }
 }
 
@@ -73,7 +73,7 @@ namespace Editor.DLLWrapper
         
             public static int CreateGameEntity(GameEntity entity)
             {
-                GameEntityDescriptor desc = new GameEntityDescriptor();
+                GameEntityDescriptor desc = new();
 
                 // Transform component
                 {

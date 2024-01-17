@@ -220,6 +220,8 @@ namespace Zetta::Graphics {
 	Surface CreateSurface(Platform::Window window);
 	void RemoveSurface(SurfaceID id);
 
+	void CreateLightSet(u64);
+	void RemoveLightSet(u64);
 	Light CreateLight(LightInitInfo info);
 	void RemoveLight(LightID id, u64 light_set_key);
 

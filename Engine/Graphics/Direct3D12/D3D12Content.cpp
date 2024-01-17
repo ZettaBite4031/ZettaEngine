@@ -111,7 +111,7 @@ namespace Zetta::Graphics::D3D12::Content {
 					}
 				}
 
-				assert(shader_index = (u32)_mm_popcnt_u32(_shader_flags));
+				assert(shader_index == (u32)_mm_popcnt_u32(_shader_flags));
 			}
 
 			[[nodiscard]] constexpr u32 TextureCount() const { return _texture_count; }
@@ -270,7 +270,11 @@ namespace Zetta::Graphics::D3D12::Content {
 
 			// Creating a new PSO is a lock-free operation
 			D3DX::D3D12PipelineStateSubobjectStream* const stream{ (D3DX::D3D12PipelineStateSubobjectStream* const)stream_ptr };
-			ID3D12PipelineState* pso{ D3DX::CreatePipelineState(stream, sizeof(D3DX::D3D12PipelineStateSubobjectStream)) };
+			ID3D12PipelineState* pso{ nullptr };
+			if (D3DX::CreatePipelineState(stream, sizeof(D3DX::D3D12PipelineStateSubobjectStream), &pso)) {
+				__debugbreak(); // Does not support SM 6.6. 
+				// TODO: RECOMPILE SHADERS IN 6.5
+			}
 
 			{	// Lock scope to add the new PSO pointer and id. Scoping unneedd, but added for clarity
 				std::lock_guard lock{ pso_mutex };

@@ -85,11 +85,13 @@ namespace Zetta::Graphics::D3D12::Light {
 						index = (u32)_cullable_owners.size();
 						_cullable_lights.emplace_back();
 						_culling_info.emplace_back();
+						_bounding_spheres.emplace_back();
 						_cullable_entity_ids.emplace_back();
 						_cullable_owners.emplace_back();
 						_dirty_bits.emplace_back();
 						assert(_cullable_owners.size() == _cullable_lights.size());
 						assert(_cullable_owners.size() == _culling_info.size());
+						assert(_cullable_owners.size() == _bounding_spheres.size());
 						assert(_cullable_owners.size() == _cullable_entity_ids.size());
 						assert(_cullable_owners.size() == _dirty_bits.size());
 					}
@@ -99,7 +101,7 @@ namespace Zetta::Graphics::D3D12::Light {
 					const LightID id{ _owners.Add(LightOwner{GameEntity::EntityID{info.entity_id}, index, info.type, info.is_enabled}) };
 					_cullable_entity_ids[index] = _owners[id].entity_id;
 					_cullable_owners[index] = id;
-					_dirty_bits[index] = dirty_bits_mask;
+					MakeDirty(index);
 					Enable(id, info.is_enabled);
 					UpdateTransforms(index);
 
@@ -206,7 +208,7 @@ namespace Zetta::Graphics::D3D12::Light {
 					assert(_owners[_cullable_owners[index]].data_index == index);
 					assert(index < _cullable_lights.size());
 					_cullable_lights[index].Intensity = intensity;
-					_dirty_bits[index] = dirty_bits_mask;
+					MakeDirty(index);
 				}
 			}
 
@@ -225,7 +227,7 @@ namespace Zetta::Graphics::D3D12::Light {
 					assert(_owners[_cullable_owners[index]].data_index == index);
 					assert(index < _cullable_lights.size());
 					_cullable_lights[index].Color = color;
-					_dirty_bits[index] = dirty_bits_mask;
+					MakeDirty(index);
 				}
 			}
 
@@ -237,7 +239,7 @@ namespace Zetta::Graphics::D3D12::Light {
 				assert(owner.type != Graphics::Light::Directional);
 				assert(index < _cullable_lights.size());
 				_cullable_lights[index].Attenuation = attenuation;
-				_dirty_bits[index] = dirty_bits_mask;
+				MakeDirty(index);
 			}
 
 			CONSTEXPR void Range(LightID id, f32 range) {
@@ -248,12 +250,21 @@ namespace Zetta::Graphics::D3D12::Light {
 				assert(owner.type != Graphics::Light::Directional);
 				assert(index < _cullable_lights.size());
 				_cullable_lights[index].Range = range;
-				_culling_info[index].Range = range;
-				_dirty_bits[index] = dirty_bits_mask;
+				_culling_info[index].Range = range;				
+#if USE_BOUNDING_SPHERES
+				_culling_info[index].CosPenumbra = -1.f;
+#endif
+				_bounding_spheres[index].Radius = range;
+				MakeDirty(index);
 
-				if (owner.type == Graphics::Light::Spot) 
+				if (owner.type == Graphics::Light::Spot) {
+					CalculateConeBoundingSphere(_cullable_lights[index], _bounding_spheres[index]);
+#if USE_BOUNDING_SPHERES
+					_culling_info[index].CosPenumbra = _cullable_lights[index].CosPenumbra;
+#else
 					_culling_info[index].ConeRadius = CalculateConeRadius(range, _cullable_lights[index].CosPenumbra);
-				
+#endif
+				}
 			}
 
 			void Umbra(LightID id, f32 umbra) {
@@ -264,7 +275,7 @@ namespace Zetta::Graphics::D3D12::Light {
 				assert(index < _cullable_lights.size());
 				umbra = Math::clamp(umbra, 0.f, Math::PI);
 				_cullable_lights[index].CosUmbra = DirectX::XMScalarCos(umbra * 0.5f);
-				_dirty_bits[index] = dirty_bits_mask;
+				MakeDirty(index);
 				if (Penumbra(id) < umbra) Penumbra(id, umbra);
 			}
 
@@ -276,8 +287,13 @@ namespace Zetta::Graphics::D3D12::Light {
 				assert(index < _cullable_lights.size());
 				penumbra = Math::clamp(penumbra, Umbra(id), Math::PI);
 				_cullable_lights[index].CosPenumbra = DirectX::XMScalarCos(penumbra * 0.5f);
+				CalculateConeBoundingSphere(_cullable_lights[index], _bounding_spheres[index]);
+#if USE_BOUNDING_SPHERES
+				_culling_info[index].CosPenumbra = _cullable_lights[index].CosPenumbra;
+#else
 				_culling_info[index].ConeRadius = CalculateConeRadius(Range(id), _cullable_lights[index].CosPenumbra);
-				_dirty_bits[index] = dirty_bits_mask;
+#endif
+				MakeDirty(index);
 			}
 
 			constexpr bool IsEnabled(LightID id) const {
@@ -362,8 +378,8 @@ namespace Zetta::Graphics::D3D12::Light {
 				return count;
 			}
 
-			CONSTEXPR void NoncullableLights(HLSL::DirectionalLightParameters* const lights, [[maybe_unused]] u32 size) {
-				assert(size == Math::AlignSizeUp<D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT>(NoncullableLightCount() * sizeof(HLSL::DirectionalLightParameters)));
+			CONSTEXPR void NoncullableLights(HLSL::DirectionalLightParameters* const lights, [[maybe_unused]] u32 size) const {
+				assert(size >= Math::AlignSizeUp<D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT>(NoncullableLightCount() * sizeof(HLSL::DirectionalLightParameters)));
 				const u32 count{ (u32)_non_cullable_owners.size() };
 				u32 index{ 0 };
 				for (u32 i{ 0 }; i < count; i++) {
@@ -392,18 +408,39 @@ namespace Zetta::Graphics::D3D12::Light {
 				return sin_penumbra * range;
 			}
 
+			void CalculateConeBoundingSphere(const HLSL::LightParameters& params, HLSL::Sphere& sphere) {
+				using namespace DirectX;
+
+				XMVECTOR tip{ XMLoadFloat3(&params.Position) };
+				XMVECTOR direction{ XMLoadFloat3(&params.Direction) };
+				const f32 cone_cos{ params.CosPenumbra };
+				assert(cone_cos > 0.1f);
+
+				if (cone_cos >= 0.707107f) {
+					sphere.Radius = params.Range / (2.f * cone_cos);
+					XMStoreFloat3(&sphere.Center, tip + sphere.Radius * direction);
+				}
+				else {
+					XMStoreFloat3(&sphere.Center, tip + cone_cos * params.Range * direction);
+					const f32 cone_sin{ sqrt(1.f - cone_cos * cone_cos) };
+					sphere.Radius = cone_sin * params.Range;
+				}
+			}
+
 			void UpdateTransforms(u32 index) {
 				const GameEntity::Entity entity{ GameEntity::EntityID{_cullable_entity_ids[index]} };
 				HLSL::LightParameters& params{ _cullable_lights[index] };
 				params.Position = entity.Position();
 
 				HLSL::LightCullingLightInfo& culling_info{ _culling_info[index] };
-				culling_info.Position = params.Position;
+				culling_info.Position = _bounding_spheres[index].Center = params.Position;
 
-				if (params.Type == Graphics::Light::Spot) 
+				if (_owners[_cullable_owners[index]].type == Graphics::Light::Spot) {
 					culling_info.Direction = params.Direction = entity.Orientation();
+					CalculateConeBoundingSphere(params, _bounding_spheres[index]);
+				}
 				
-				_dirty_bits[index] = dirty_bits_mask;
+				MakeDirty(index);
 			}
 
 			CONSTEXPR void AddCullableLightParameters(const LightInitInfo& info, u32 index) {
@@ -411,17 +448,19 @@ namespace Zetta::Graphics::D3D12::Light {
 				assert(info.type != Light::Directional && index < _cullable_lights.size());
 
 				HLSL::LightParameters& params{ _cullable_lights[index] };
-				params.Type = info.type;
+#if !USE_BOUNDING_SPHERES
 				assert(params.Type < Light::count);
+				params.Type = info.type;
+#endif
 				params.Color = info.color;
-				params.Intensity = params.Intensity;
+				params.Intensity = info.intensity;
 
-				if (params.Type == Light::Point) {
+				if (info.type == Light::Point) {
 					const PointLightParams& p{ info.point_params };
 					params.Attenuation = p.attenuation;
 					params.Range = p.range;
 				}
-				else if (params.Type == Light::Spot) {
+				else if (info.type == Light::Spot) {
 					const SpotLightParams& p{ info.spot_params };
 					params.Attenuation = p.attenuation;
 					params.Range = p.range;
@@ -435,14 +474,23 @@ namespace Zetta::Graphics::D3D12::Light {
 				assert(info.type != Light::Directional && index < _culling_info.size());
 				
 				HLSL::LightParameters& params{ _cullable_lights[index] };
-				assert(params.Type == info.type);
 
 				HLSL::LightCullingLightInfo& culling_info{ _culling_info[index] };
-				culling_info.Range = params.Range;
+				culling_info.Range = _bounding_spheres[index].Radius = params.Range;
+#if USE_BOUNDING_SPHERES
+				culling_info.CosPenumbra = -1.f;
+#else
+				assert(params.Type == info.type);
 				culling_info.Type = params.Type;
+#endif
 
-				if (info.type == Light::Spot) 
+				if (info.type == Light::Spot) {
+#if USE_BOUNDING_SPHERES
+					culling_info.CosPenumbra = params.CosPenumbra;
+#else
 					culling_info.ConeRadius = CalculateConeRadius(params.Range, params.CosPenumbra);
+#endif
+				}
 			}
 
 			void SwapCullableLights(u32 index1, u32 index2) {
@@ -453,6 +501,8 @@ namespace Zetta::Graphics::D3D12::Light {
 				assert(index2 < _culling_info.size());
 				assert(index1 < _cullable_lights.size());
 				assert(index2 < _cullable_lights.size());
+				assert(index1 < _bounding_spheres.size());
+				assert(index2 < _bounding_spheres.size());
 				assert(index1 < _cullable_entity_ids.size());
 				assert(index2 < _cullable_entity_ids.size());
 				assert(ID::IsValid(_cullable_owners[index1]) || ID::IsValid(_cullable_owners[index2]));
@@ -460,16 +510,17 @@ namespace Zetta::Graphics::D3D12::Light {
 				if (!ID::IsValid(_cullable_owners[index2])) std::swap(index1, index2);
 				if (!ID::IsValid(_cullable_owners[index1])) {
 					LightOwner& owner2{ _owners[_cullable_owners[index2]] };
-					assert(owner2.data_index = index2);
+					assert(owner2.data_index == index2);
 					owner2.data_index = index1;
 
 					_culling_info[index1] = _culling_info[index2];
 					_cullable_lights[index1] = _cullable_lights[index2];
+					_bounding_spheres[index1] = _bounding_spheres[index2];
 					_cullable_entity_ids[index1] = _cullable_entity_ids[index2];
 					std::swap(_cullable_owners[index1], _cullable_owners[index2]);
-					_dirty_bits[index1] = dirty_bits_mask;
+					MakeDirty(index1);
 					assert(_owners[_cullable_owners[index1]].entity_id == _cullable_entity_ids[index1]);
-					assert(ID::IsValid(_cullable_owners[index1]));
+					assert(!ID::IsValid(_cullable_owners[index2]));
 				}
 				else {
 					// Swap light parameter indices
@@ -482,6 +533,7 @@ namespace Zetta::Graphics::D3D12::Light {
 
 					std::swap(_cullable_lights[index1], _cullable_lights[index2]);
 					std::swap(_culling_info[index1], _culling_info[index2]);
+					std::swap(_bounding_spheres[index1], _bounding_spheres[index2]);
 					std::swap(_cullable_entity_ids[index1], _cullable_entity_ids[index2]);
 					std::swap(_cullable_owners[index1], _cullable_owners[index2]);
 
@@ -489,11 +541,14 @@ namespace Zetta::Graphics::D3D12::Light {
 					assert(_owners[_cullable_owners[index2]].entity_id == _cullable_entity_ids[index2]);
 
 					// Set dirty bits
-					assert(index1 < _dirty_bits.size());
-					assert(index2 < _dirty_bits.size());
-					_dirty_bits[index1] = dirty_bits_mask;
-					_dirty_bits[index2] = dirty_bits_mask;
+					MakeDirty(index1);
+					MakeDirty(index2);
 				}
+			}
+
+			CONSTEXPR void MakeDirty(u32 index) {
+				assert(index < _dirty_bits.size());
+				_dirty = _dirty_bits[index] = dirty_bits_mask;
 			}
 
 			// NOTE: These are NOT tightly packed
@@ -504,12 +559,14 @@ namespace Zetta::Graphics::D3D12::Light {
 			// NOTE: These are tightly packed
 			util::vector<HLSL::LightParameters>				_cullable_lights;
 			util::vector<HLSL::LightCullingLightInfo>		_culling_info;
+			util::vector<HLSL::Sphere>						_bounding_spheres;
 			util::vector<GameEntity::EntityID>				_cullable_entity_ids;
 			util::vector<LightID>							_cullable_owners;
 			util::vector<u8>								_dirty_bits;
 				
 			util::vector<u8>								transform_flags_cache;
 			u32												_enabled_light_count{ 0 };
+			u8												_dirty{ 0 };
 
 			friend class D3D12LightBuffer;
 		};
@@ -518,59 +575,62 @@ namespace Zetta::Graphics::D3D12::Light {
 		public:
 			D3D12LightBuffer() = default;
 			CONSTEXPR void UpdateLightBuffers(LightSet& set, u64 light_set_key, u32 frame_idx) {
-				u32 sizes[LightBuffer::count]{};
-				sizes[LightBuffer::NoncullableLights] = set.NoncullableLightCount() * sizeof(HLSL::DirectionalLightParameters);
-				sizes[LightBuffer::CullableLights] = set.CullableLightCount() * sizeof(HLSL::LightParameters);
-				sizes[LightBuffer::CullingInfo] = set.CullableLightCount() * sizeof(HLSL::LightCullingLightInfo);
+				const u32 noncullable_light_count{ set.NoncullableLightCount() };
+				const u32 cullable_light_count{ set.CullableLightCount() };
 
-				u32 current_sizes[LightBuffer::count]{};
-				current_sizes[LightBuffer::NoncullableLights] = _buffers[LightBuffer::NoncullableLights].buffer.Size();
-				current_sizes[LightBuffer::CullableLights] = _buffers[LightBuffer::CullableLights].buffer.Size();
-				current_sizes[LightBuffer::CullingInfo] = _buffers[LightBuffer::CullingInfo].buffer.Size();
+				if (noncullable_light_count) {
+					const u32 needed_size{ noncullable_light_count * sizeof(HLSL::DirectionalLightParameters) };
+					const u32 current_size{ _buffers[LightBuffer::NoncullableLights].buffer.Size() };
 
-				if (current_sizes[LightBuffer::NoncullableLights] < sizes[LightBuffer::NoncullableLights]) {
-					ResizeBuffer(LightBuffer::NoncullableLights, sizes[LightBuffer::NoncullableLights], frame_idx);
+					if (current_size < needed_size) ResizeBuffer(LightBuffer::NoncullableLights, needed_size, frame_idx);
+
+					set.NoncullableLights((HLSL::DirectionalLightParameters* const)_buffers[LightBuffer::NoncullableLights].cpu_addr,
+						_buffers[LightBuffer::NoncullableLights].buffer.Size());
 				}
-
-				set.NoncullableLights((HLSL::DirectionalLightParameters* const)_buffers[LightBuffer::NoncullableLights].cpu_addr, 
-					_buffers[LightBuffer::NoncullableLights].buffer.Size());
 
 				// Update cullable light buffers
-				bool buffers_resized{ false };
-				if (current_sizes[LightBuffer::CullableLights] < sizes[LightBuffer::CullableLights]) {
-					assert(current_sizes[LightBuffer::CullableLights] < sizes[LightBuffer::CullableLights]);
-					ResizeBuffer(LightBuffer::CullableLights, sizes[LightBuffer::CullableLights], frame_idx);
-					ResizeBuffer(LightBuffer::CullingInfo, sizes[LightBuffer::CullingInfo], frame_idx);
-					buffers_resized = true;
-				}
+				if (cullable_light_count) {
+					const u32 needed_light_buffer_size{ cullable_light_count * sizeof(HLSL::LightParameters) };
+					const u32 needed_culling_buffer_size{ cullable_light_count * sizeof(HLSL::LightCullingLightInfo) };
+					const u32 needed_spheres_buffer_size{ cullable_light_count * sizeof(HLSL::Sphere) };
+					const u32 current_light_buffer_size{ _buffers[LightBuffer::CullableLights].buffer.Size() };
 
-				bool all_lights_updated{ false };
-				if (buffers_resized || _current_light_set_key != light_set_key) {
-					memcpy(_buffers[LightBuffer::CullableLights].cpu_addr, set._cullable_lights.data(), sizes[LightBuffer::CullableLights]);
-					memcpy(_buffers[LightBuffer::CullingInfo].cpu_addr, set._culling_info.data(), sizes[LightBuffer::CullingInfo]);
-					_current_light_set_key = light_set_key;
-					all_lights_updated = true;
-				}
-
-				assert(_current_light_set_key == light_set_key);
-				const u32 index_mask{ 1UL << frame_idx };
-				if (all_lights_updated) {
-					for (u32 i{ 0 }; i < set.CullableLightCount(); i++) {
-						set._dirty_bits[i] &= ~index_mask;
+					bool buffers_resized{ false };
+					if (current_light_buffer_size < needed_light_buffer_size) {
+						ResizeBuffer(LightBuffer::CullableLights, (needed_light_buffer_size * 3) >> 1, frame_idx);
+						ResizeBuffer(LightBuffer::CullingInfo, (needed_culling_buffer_size * 3) >> 1, frame_idx);
+						ResizeBuffer(LightBuffer::BoundingSpheres, (needed_spheres_buffer_size * 3) >> 1, frame_idx);
+						buffers_resized = true;
 					}
-				}
-				else {
-					for (u32 i{ 0 }; i < set.CullableLightCount(); i++) {
-						if (set._dirty_bits[i] & index_mask) {
-							assert(i * sizeof(HLSL::LightParameters) < sizes[LightBuffer::CullableLights]);
-							assert(i * sizeof(HLSL::LightCullingLightInfo) < sizes[LightBuffer::CullingInfo]);
-							u8* const light_dst{ _buffers[LightBuffer::CullableLights].cpu_addr + (i * sizeof(HLSL::LightParameters)) };
-							u8* const culling_dst{ _buffers[LightBuffer::CullingInfo].cpu_addr + (i * sizeof(HLSL::LightCullingLightInfo)) };
-							memcpy(light_dst, &set._cullable_lights[i], sizeof(HLSL::LightParameters));
-							memcpy(culling_dst, &set._culling_info[i], sizeof(HLSL::LightCullingLightInfo));
+
+					const u32 index_mask{ 1UL << frame_idx };
+					if (buffers_resized || _current_light_set_key != light_set_key) {
+						memcpy(_buffers[LightBuffer::CullableLights].cpu_addr, set._cullable_lights.data(), needed_light_buffer_size);
+						memcpy(_buffers[LightBuffer::CullingInfo].cpu_addr, set._culling_info.data(), needed_culling_buffer_size);
+						memcpy(_buffers[LightBuffer::BoundingSpheres].cpu_addr, set._bounding_spheres.data(), needed_spheres_buffer_size);
+						_current_light_set_key = light_set_key;
+						for (u32 i{ 0 }; i < cullable_light_count; i++)
 							set._dirty_bits[i] &= ~index_mask;
+					}
+
+					else if (set._dirty) {
+						for (u32 i{ 0 }; i < cullable_light_count; i++) {
+							if (set._dirty_bits[i] & index_mask) {
+								assert(i * sizeof(HLSL::LightParameters) < needed_light_buffer_size);
+								assert(i * sizeof(HLSL::LightCullingLightInfo) < needed_culling_buffer_size);
+								u8* const light_dst{ _buffers[LightBuffer::CullableLights].cpu_addr + (i * sizeof(HLSL::LightParameters)) };
+								u8* const culling_dst{ _buffers[LightBuffer::CullingInfo].cpu_addr + (i * sizeof(HLSL::LightCullingLightInfo)) };
+								u8* const bounding_dst{ _buffers[LightBuffer::BoundingSpheres].cpu_addr + (i * sizeof(HLSL::Sphere)) };
+								memcpy(light_dst, &set._cullable_lights[i], sizeof(HLSL::LightParameters));
+								memcpy(culling_dst, &set._culling_info[i], sizeof(HLSL::LightCullingLightInfo));
+								memcpy(bounding_dst, &set._bounding_spheres[i], sizeof(HLSL::Sphere));
+								set._dirty_bits[i] &= ~index_mask;
+							}
 						}
 					}
+
+					set._dirty &= ~index_mask;
+					assert(_current_light_set_key == light_set_key);
 				}
 			}
 
@@ -584,6 +644,7 @@ namespace Zetta::Graphics::D3D12::Light {
 			const D3D12_GPU_VIRTUAL_ADDRESS NoncullableLights() const { return _buffers[LightBuffer::NoncullableLights].buffer.GPU_Address(); }
 			const D3D12_GPU_VIRTUAL_ADDRESS CullableLights() const { return _buffers[LightBuffer::CullableLights].buffer.GPU_Address(); }
 			const D3D12_GPU_VIRTUAL_ADDRESS CullingInfo() const { return _buffers[LightBuffer::CullingInfo].buffer.GPU_Address(); }
+			const D3D12_GPU_VIRTUAL_ADDRESS BoundingSpheres() const { return _buffers[LightBuffer::BoundingSpheres].buffer.GPU_Address(); }
 
 		private:
 			struct LightBuffer {
@@ -591,6 +652,7 @@ namespace Zetta::Graphics::D3D12::Light {
 					NoncullableLights,
 					CullableLights,
 					CullingInfo,
+					BoundingSpheres,
 
 					count
 				};
@@ -601,21 +663,21 @@ namespace Zetta::Graphics::D3D12::Light {
 
 			void ResizeBuffer(LightBuffer::Type type, u32 size, [[maybe_unused]] u32 frame_idx) {
 				assert(type < LightBuffer::count);
-				if (!size) return;
+				if (!size || _buffers[type].buffer.Size() >= Math::AlignSizeUp<D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT>(size)) return;
 
-				_buffers[type].buffer.Release();
 				_buffers[type].buffer = D3D12Buffer{ ConstantBuffer::GetDefaultInitInfo(size), true };
 				NAME_D3D12_OBJECT_INDEXED(_buffers[type].buffer.Buffer(), frame_idx,
 					type == LightBuffer::NoncullableLights ? L"Noncullable Light Buffer" :
 					type == LightBuffer::CullableLights ? L"Cullable Light Buffer" :
-					type == LightBuffer::CullingInfo ? L"Culling Info Buffer" : L"Unknown Light Buffer");
+					type == LightBuffer::CullingInfo ? L"Culling Info Buffer" :
+					type == LightBuffer::BoundingSpheres ? L"Bounding Spheres Buffer" : L"Unknown Light Buffer");
 
 				D3D12_RANGE range{};
 				DXCall(_buffers[type].buffer.Buffer()->Map(0, &range, (void**)(&_buffers[type].cpu_addr)));
 				assert(_buffers[type].cpu_addr);
 			}
 
-			LightBuffer _buffers[LightBuffer::count];
+			LightBuffer _buffers[LightBuffer::count]{};
 			u64 _current_light_set_key{ 0 };
 		};
 
@@ -760,19 +822,26 @@ namespace Zetta::Graphics::D3D12::Light {
 	}
 
 	void Shutdown() {
-		assert([] {
-			bool has_lights{ false };
-			for (const auto& it : light_sets)
-				has_lights |= it.second.HasLights();
-			return !has_lights;
-			}());
+		assert(light_sets.empty());
 
 		for (u32 i{ 0 }; i < FrameBufferCount; i++)
 			light_buffers[i].Release();
+	}
 
+	void CreateLightSet(u64 key) {
+		assert(!light_sets.count(key));
+		LightSet set = {};
+		light_sets[key] = set;
+	}
+
+	void RemoveLightSet(u64 key) {
+		assert(light_sets.count(key));
+		assert(!light_sets[key].HasLights());
+		light_sets.erase(key);
 	}
 
 	Graphics::Light Create(LightInitInfo info) {
+		assert(light_sets.count(info.light_set_key));
 		assert(ID::IsValid(info.entity_id));
 		return light_sets[info.light_set_key].Add(info);
 	}
@@ -821,6 +890,11 @@ namespace Zetta::Graphics::D3D12::Light {
 	D3D12_GPU_VIRTUAL_ADDRESS CullingInfoBuffer(u32 frame_idx) {
 		const D3D12LightBuffer& light_buffer{ light_buffers[frame_idx] };
 		return light_buffer.CullingInfo();
+	}
+
+	D3D12_GPU_VIRTUAL_ADDRESS BoundingSphereBuffer(u32 frame_idx) {
+		const D3D12LightBuffer& light_buffer{ light_buffers[frame_idx] };
+		return light_buffer.BoundingSpheres();
 	}
 
 	u32 NoncullableLightCount(u64 light_set_key) {

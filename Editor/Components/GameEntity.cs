@@ -91,7 +91,7 @@ namespace Editor.Components
         public Scene ParentScene { get; private set; }
 
         [DataMember(Name = nameof(Components))]
-        private readonly ObservableCollection<Component> _components = new ObservableCollection<Component>();
+        private readonly ObservableCollection<Component> _components = new();
         public ReadOnlyObservableCollection<Component> Components { get; private set; }
 
         public Component GetComponent(Type type) => Components.FirstOrDefault(x => x.GetType() == type);
@@ -174,7 +174,7 @@ namespace Editor.Components
             }
         }
 
-        private readonly ObservableCollection<IMSComponent> _components = new ObservableCollection<IMSComponent>();
+        private readonly ObservableCollection<IMSComponent> _components = new();
         public ReadOnlyObservableCollection<IMSComponent> Components { get; }
 
         public T GetMSComponent<T>() where T : IMSComponent

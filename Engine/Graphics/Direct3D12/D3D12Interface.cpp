@@ -24,6 +24,8 @@ namespace Zetta::Graphics::D3D12 {
 		pi.Camera.SetParameter = Camera::SetParameter;
 		pi.Camera.GetParameter = Camera::GetParameter;
 
+		pi.Light.CreateLightSet = Light::CreateLightSet;
+		pi.Light.RemoveLightSet = Light::RemoveLightSet;
 		pi.Light.Create = Light::Create;
 		pi.Light.Remove = Light::Remove;
 		pi.Light.SetParameter = Light::SetParameter;

@@ -2,6 +2,8 @@
 #error Do not directly include in shader files. Only include via Common.hlsli
 #endif
 
+#define USE_BOUNDING_SPHERES 1
+
 struct GlobalShaderData
 {
     float4x4 View;
@@ -47,10 +49,18 @@ struct Cone
     float Radius;
 };
 
+#if USE_BOUNDING_SPHERES
+struct Frustum
+{
+    float3  ConeDirection;
+    float   UnitRadius;
+};
+#else
 struct Frustum
 {
     Plane Planes[4];
 };
+#endif
 
 #ifndef __cplusplus
 struct ComputeShaderInput
@@ -77,10 +87,15 @@ struct LightCullingLightInfo
     float Range;
     
     float3 Direction;
+#if USE_BOUNDING_SPHERES
+    // if this is set to -1 then the light is a point light
+    float CosPenumbra;
+#else
     float ConeRadius;
-    
+
     uint Type;
     float3 _padding;
+#endif
 };
 
 // Contains light data that's formatted and ready to be copied
@@ -91,16 +106,18 @@ struct LightParameters
     float Intensity;
     
     float3 Direction;
-    uint Type;
-    
-    float3 Color;
     float Range;
     
-    float3 Attenuation;
+    float3 Color;
     float CosUmbra;
     
+    float3 Attenuation;
     float CosPenumbra;
+    
+#if !USE_BOUNDING_SPHERES
     float3 _padding;
+    uint Type;
+#endif
 };
 
 struct DirectionalLightParameters

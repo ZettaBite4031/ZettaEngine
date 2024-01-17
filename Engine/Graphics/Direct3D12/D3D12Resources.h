@@ -63,7 +63,6 @@ namespace Zetta::Graphics::D3D12{
 		u32 stride{ 0 };
 		u32 element_count{ 0 };
 		u32 alignment{ 0 };
-		bool create_uav{ false };
 	};
 
 	class D3D12Buffer {
@@ -168,17 +167,17 @@ namespace Zetta::Graphics::D3D12{
 		std::mutex _mutex{};
 	};
 
-	class StructuredBuffer {
+	class UAV_ClearableBuffer {
 	public:
-		StructuredBuffer() = default;
-		explicit StructuredBuffer(const D3D12BufferInitInfo& info);
-		DISABLE_COPY(StructuredBuffer);
-		constexpr StructuredBuffer(StructuredBuffer&& o) 
-			: _buffer{ std::move(o._buffer) }, _uav{ o._uav }, _uav_shader_visible{ o._uav_shader_visible }, _stride{ o._stride } {
+		UAV_ClearableBuffer() = default;
+		explicit UAV_ClearableBuffer(const D3D12BufferInitInfo& info);
+		DISABLE_COPY(UAV_ClearableBuffer);
+		constexpr UAV_ClearableBuffer(UAV_ClearableBuffer&& o)
+			: _buffer{ std::move(o._buffer) }, _uav{ o._uav }, _uav_shader_visible{ o._uav_shader_visible } {
 			o.Reset();
 		}
 
-		constexpr StructuredBuffer& operator=(StructuredBuffer&& o) {
+		constexpr UAV_ClearableBuffer& operator=(UAV_ClearableBuffer&& o) {
 			assert(this != &o);
 			if (this != &o) {
 				Release();
@@ -187,14 +186,18 @@ namespace Zetta::Graphics::D3D12{
 			return *this;
 		}
 
-		~StructuredBuffer() { Release(); }
+		~UAV_ClearableBuffer() { Release(); }
 
 		void Release();
 
 		void ClearUAV(ID3D12GraphicsCommandList* const cmd_list, const u32 *const values) const {
+			assert(Buffer());
+			assert(_uav.IsValid() && _uav_shader_visible.IsValid() && _uav_shader_visible.IsShaderVisible());
 			cmd_list->ClearUnorderedAccessViewUint(_uav_shader_visible.gpu, _uav.cpu, Buffer(), values, 0, nullptr);
 		}
 		void ClearUAV(ID3D12GraphicsCommandList* const cmd_list, const f32 *const values) const {
+			assert(Buffer());
+			assert(_uav.IsValid() && _uav_shader_visible.IsValid() && _uav_shader_visible.IsShaderVisible());
 			cmd_list->ClearUnorderedAccessViewFloat(_uav_shader_visible.gpu, _uav.cpu, Buffer(), values, 0, nullptr);
 		}
 
@@ -204,23 +207,20 @@ namespace Zetta::Graphics::D3D12{
 		[[nodiscard]] constexpr DescriptorHandle UAV() const { return _uav; }
 		[[nodiscard]] constexpr DescriptorHandle UAV_ShaderVisible() const { return _uav_shader_visible; }
 
-		[[nodiscard]] constexpr static D3D12BufferInitInfo GetDefaultInitInfo(u32 stride, u32 element_count) {
-			assert(stride && element_count);
+		[[nodiscard]] constexpr static D3D12BufferInitInfo GetDefaultInitInfo(u32 size) {
+			assert(size);
 			D3D12BufferInitInfo info{};
-			info.size = stride * element_count;
-			info.stride = stride;
-			info.element_count = element_count;
-			info.alignment = stride;
+			info.size = size;
+			info.alignment = sizeof(Math::v4);
 			info.flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			return info;
 		}
 
 	private:
-		constexpr void Move(StructuredBuffer& o) {
+		constexpr void Move(UAV_ClearableBuffer& o) {
 			_buffer = std::move(o._buffer);
 			_uav = o._uav;
 			_uav_shader_visible = o._uav_shader_visible;
-			_stride = o._stride;
 
 			o.Reset();
 		}
@@ -228,7 +228,6 @@ namespace Zetta::Graphics::D3D12{
 		constexpr void Reset() {
 			_uav = {};
 			_uav_shader_visible = {};
-			_stride = 0;
 
 		}
 
@@ -237,7 +236,6 @@ namespace Zetta::Graphics::D3D12{
 		D3D12Buffer			_buffer{};
 		DescriptorHandle	_uav{};
 		DescriptorHandle	_uav_shader_visible{};
-		u32					_stride{ 0 };
 	};
 
 	struct D3D12TextureInitInfo {
