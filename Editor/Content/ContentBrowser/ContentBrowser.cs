@@ -9,19 +9,72 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 
 namespace Editor.Content
 {
-    sealed class ContentInfo
+    sealed class ContentInfo : ViewModelBase
     {
         public static int IconWidth => 90;
         public byte[] Icon { get; }
         public byte[] IconSmall { get; }
-        public string FullPath { get; }
+        public string FullPath { get; private set; }
         public string FileName => Path.GetFileNameWithoutExtension(FullPath);
         public bool IsDirectory { get; }
-        public DateTime DateModified { get; }
+        public DateTime DateModified { get; private set; }
         public long? Size { get; }
+
+        public ICommand RenameCommand { get; private set; }
+
+        private void Rename(string name)
+        {
+            if (string.IsNullOrEmpty(name.Trim())) return;
+
+            var extension = IsDirectory ? string.Empty : Asset.AssetFileExtension;
+            var path = $@"{Path.GetDirectoryName(FullPath)}{Path.DirectorySeparatorChar}{name}{extension}";
+
+            if (!Validate(path, name)) return;
+
+            try
+            {
+                if (IsDirectory) Directory.Move(FullPath, path);
+                else File.Move(FullPath, path);
+                FullPath = path;
+                var info = new FileInfo(FullPath);
+                DateModified = info.LastWriteTime;
+
+                OnPropertyChanged(nameof(DateModified));
+                OnPropertyChanged(nameof(FullPath));
+            }
+            catch (Exception ex) { Debug.WriteLine(ex.Message); }
+        }
+
+        private bool Validate(string path, string name)
+        {
+            var fileName = Path.GetFileName(path);
+            var dirName = IsDirectory ? path : Path.GetDirectoryName(path);
+            var errorMsg = string.Empty;
+
+            if (!string.IsNullOrEmpty(Path.GetDirectoryName(name)))
+                errorMsg = "Fil and folder names may not include sub-directories";
+
+            if (!IsDirectory)
+            {
+                if (fileName.IndexOfAny(Path.GetInvalidFileNameChars()) != -1)
+                    errorMsg = "Invalid character(s) used in file name.";
+                if (File.Exists(path)) errorMsg = "A file already exists with the same name.";
+            }
+            else if (Directory.Exists(path))
+                errorMsg = "A directory already exists with the same name.";
+
+            if (dirName.IndexOfAny(Path.GetInvalidPathChars()) != -1)
+                errorMsg = "Invalid character(s) used in path name.";
+            
+            if (!string.IsNullOrEmpty(errorMsg))
+                MessageBox.Show(errorMsg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            
+            return string.IsNullOrEmpty(errorMsg);
+        }
 
         public ContentInfo(string fullPath, byte[] icon = null, byte[] iconSmall = null, DateTime? lastModified = null)
         {
@@ -33,6 +86,8 @@ namespace Editor.Content
             Icon = icon;
             IconSmall = iconSmall ?? icon;
             FullPath = fullPath;
+
+            RenameCommand = new CommandRelay<string>(x => Rename(x));
         }
     }
 
@@ -92,12 +147,7 @@ namespace Editor.Content
                     folderContent.Add(new ContentInfo(dir));
                 
                 foreach (var file in Directory.GetFiles(path, $"*{Asset.AssetFileExtension}"))
-                {
-                    var fileInfo = new FileInfo(file);
-
                     folderContent.Add(ContentInfoCache.Add(file));
-                }
-                
             }
             catch (Exception ex) { Debug.WriteLine(ex.Message); }
 
@@ -117,7 +167,6 @@ namespace Editor.Content
             Debug.Assert(!string.IsNullOrEmpty(contentFolder.Trim()));
             contentFolder = Path.TrimEndingDirectorySeparator(contentFolder);
             ContentFolder = contentFolder;
-            SelectedFolder = contentFolder;
             FolderContent = new ReadOnlyObservableCollection<ContentInfo>(_folderContent);
 
             ContentWatcher.ContentModified += OnContentModified;

@@ -446,7 +446,7 @@ namespace Zetta::Graphics::D3D12::Content {
 	}
 
 	namespace Texture {
-		void GetDescriptorIndices(const ID::ID_Type* const texture_ids, u32 id_count, u32* const indices) {
+		void GetDescriptorIndices([[maybe_unused]] const ID::ID_Type* const texture_ids, u32 id_count, u32* const indices) {
 			assert(texture_ids && id_count && indices);
 			std::lock_guard lock{ texture_mutex };
 			for (u32 i{ 0 }; i < id_count; i++)

@@ -24,6 +24,7 @@ namespace Zetta::Content {
 			IS_IMPORTED_AS_NORMAL_MAP = 0x08,
 			IS_CUBE_MAP = 0x10,
 			IS_VOLUME_MAP = 0x20,
+			IS_SRGB = 0x40,
 		};
 	};
 

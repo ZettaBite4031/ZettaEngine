@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Editor.GameProject;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -25,6 +26,13 @@ namespace Editor.Content
         public SaveDialog()
         {
             InitializeComponent();
+
+            contentBrowserView.Loaded += (_, _) =>
+            {
+                var contentBrowser = contentBrowserView.DataContext as ContentBrowser;
+                contentBrowser.SelectedFolder = contentBrowser.ContentFolder;
+            };
+
             Closing += OnSaveDialogClosing;
         }
 

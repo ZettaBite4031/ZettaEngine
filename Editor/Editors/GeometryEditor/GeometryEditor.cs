@@ -287,13 +287,30 @@ namespace Editor.Editors
 
 	class GeometryEditor : ViewModelBase, IAssetEditor
 	{
+
+		private AssetEditorState _State;
+		public AssetEditorState State
+		{
+			get => _State;
+			private set
+			{
+				if (_State != value)
+				{
+					_State = value;
+					OnPropertyChanged(nameof(State));
+				}
+			}
+		}
+
+		public Guid AssetGuid { get; private set; }
+
 		Asset IAssetEditor.Asset => _Geometry;
 
 		private Content.Geometry _Geometry;
 		public Content.Geometry Geometry
 		{
 			get => _Geometry;
-			set
+			private set
 			{
 				if (_Geometry != value)
 				{
@@ -382,6 +399,7 @@ namespace Editor.Editors
 			Debug.Assert(asset is Content.Geometry);
 			if (asset is Content.Geometry geometry)
 			{
+				AssetGuid = asset.Guid;
 				Geometry = geometry;
 				var numLODs = Geometry.GetLODGroup().LODs.Count;
 				if (LodIndex >= numLODs)
@@ -396,6 +414,7 @@ namespace Editor.Editors
 		{
 			try
 			{
+				AssetGuid = info.Guid;
 				Debug.Assert(info != null && File.Exists(info.FullPath));
 				var geometry = new Content.Geometry();
 				await Task.Run(() =>

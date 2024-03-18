@@ -117,8 +117,6 @@ namespace Zetta::Graphics::D3D12::Light {
 					_non_cullable_owners[owner.data_index] = LightID{ ID::Invalid_ID };
 				}
 				else {
-					auto test2 = _cullable_owners[owner.data_index];
-					auto test = _owners[_cullable_owners[owner.data_index]];
 					assert(_owners[_cullable_owners[owner.data_index]].data_index == owner.data_index);
 					_cullable_owners[owner.data_index] = LightID{ ID::Invalid_ID };
 				}

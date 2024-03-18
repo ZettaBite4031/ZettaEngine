@@ -7,6 +7,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -438,7 +439,13 @@ namespace Editor.Content
 
 			if (ImportSettings.ImportEmbededTextures)
 			{
-
+				var embeddedMediaDir = $@"{tempPath}{Path.GetFileNameWithoutExtension(tempFile)}.fbm{Path.DirectorySeparatorChar}";
+				if (Directory.Exists(embeddedMediaDir))
+				{
+					Debug.Assert(!string.IsNullOrEmpty(FullPath));
+					var files = Directory.GetFiles(embeddedMediaDir);
+					new ConfigureImportSettings(files, Path.GetDirectoryName(FullPath)).Import();
+				}
 			}
 
 			return res;
@@ -680,5 +687,11 @@ namespace Editor.Content
 		}
 
 		public Geometry() : base(AssetType.Mesh) { }
+
+		public Geometry(IAssetImportSettings importSettings) : this()
+		{
+			Debug.Assert(importSettings is GeometryImportSettings);
+			ImportSettings = (GeometryImportSettings)importSettings;
+		}
 	}
 }

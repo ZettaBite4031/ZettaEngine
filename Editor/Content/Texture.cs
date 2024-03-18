@@ -86,12 +86,14 @@ namespace Editor.Content
         DXGI_FORMAT_G8R8_G8B8_UNORM = 69,
         DXGI_FORMAT_BC1_TYPELESS = 70,
         DXGI_FORMAT_BC1_UNORM = 71,
+        [Description("BC1 (sRGBA) Low Quality Alpha")]
         DXGI_FORMAT_BC1_UNORM_SRGB = 72,
         DXGI_FORMAT_BC2_TYPELESS = 73,
         DXGI_FORMAT_BC2_UNORM = 74,
         DXGI_FORMAT_BC2_UNORM_SRGB = 75,
         DXGI_FORMAT_BC3_TYPELESS = 76,
         DXGI_FORMAT_BC3_UNORM = 77,
+        [Description("BC3 (sRGBA) Medium Quality")]
         DXGI_FORMAT_BC3_UNORM_SRGB = 78,
         DXGI_FORMAT_BC4_TYPELESS = 79,
         DXGI_FORMAT_BC4_UNORM = 80,
@@ -113,6 +115,7 @@ namespace Editor.Content
         DXGI_FORMAT_BC6H_SF16 = 96,
         DXGI_FORMAT_BC7_TYPELESS = 97,
         DXGI_FORMAT_BC7_UNORM = 98,
+        [Description("BC7 (sRGBA) High Quality")]
         DXGI_FORMAT_BC7_UNORM_SRGB = 99,
         DXGI_FORMAT_AYUV = 100,
         DXGI_FORMAT_Y410 = 101,
@@ -182,6 +185,7 @@ namespace Editor.Content
         IsImportedAsNormalMap = 0x08,
         IsCubeMap = 0x10,
         IsVolumeMap = 0x20,
+        IsSRGB = 0x40,
     }
 
     class TextureImportSettings : ViewModelBase, IAssetImportSettings
@@ -319,7 +323,7 @@ namespace Editor.Content
             AlphaThreshold = 0.5f;
             PreferBC7 = true;
             FormatIndex = 0;
-            Compress = false;
+            Compress = true;
         }
     }
 
@@ -335,6 +339,8 @@ namespace Editor.Content
     class Texture : Asset
     {
         public static int MaxMipLevels => 14;
+        public static int MaxArraySize => 2048;
+        public static int Max3DSize => 2048;
 
         public TextureImportSettings ImportSettings { get; } = new();
 
@@ -411,6 +417,7 @@ namespace Editor.Content
                     OnPropertyChanged(nameof(IsNormalMap));
                     OnPropertyChanged(nameof(IsCubeMap));
                     OnPropertyChanged(nameof(IsVolumeMap));
+                    OnPropertyChanged(nameof(IsSRGB));
                 }
             }
         }
@@ -421,6 +428,7 @@ namespace Editor.Content
         public bool IsNormalMap => Flags.HasFlag(TextureFlags.IsImportedAsNormalMap);
         public bool IsCubeMap => Flags.HasFlag(TextureFlags.IsCubeMap);
         public bool IsVolumeMap => Flags.HasFlag(TextureFlags.IsVolumeMap);
+        public bool IsSRGB => Flags.HasFlag(TextureFlags.IsSRGB);
 
         private int _MipLevels;
         public int MipLevels
@@ -451,29 +459,39 @@ namespace Editor.Content
             }
         }
 
-        public string FormatName => (ImportSettings.Compress) ? ((BC_FORMAT)Format).GetDescription() : Format.GetDescription();
+        public string FormatName => (ImportSettings.Compress && !IsSRGB) ? ((BC_FORMAT)Format).GetDescription() : Format.GetDescription();
 
-        private static bool HasValidDimensions(int width, int height, string file)
+        private static bool HasValidDimensions(int width, int height, int arrayOrDepth, bool is3D, string file)
         {
             bool res = true;
 
+            if (width > (1 << MaxMipLevels) || height > (1 << MaxMipLevels))
+            {
+                Logger.Log(MessageType.Error, $"Image Dimensions greater than {1 << MaxMipLevels}. (file: {file})");
+                res = false;
+            }
+
+            if (is3D && (width > Max3DSize || height > Max3DSize || arrayOrDepth > Max3DSize))
+            {
+                Logger.Log(MessageType.Error, $"3D texture dimensions greater than {Max3DSize}! (file: {file})");
+                res = false;
+            }
+
+            else if (arrayOrDepth > MaxArraySize)
+            {
+                Logger.Log(MessageType.Error, $"2D texture dimensions greater than {MaxArraySize}! (file: {file})");
+                res = false;
+            }
+
             if (width % 4 != 0 || height % 4 != 0)
-            {
-                Logger.Log(MessageType.Warn, $"Image Dimensions must be a multiple of 4. (file: {file})");
-                res = false;
-            }
+                Logger.Log(MessageType.Error, $"Image Dimensions must be a multiple of 4. (file: {file})");
+
             if (width != height)
-            {
                 Logger.Log(MessageType.Warn, $"Image is not a square (width != height). (file: {file})");
-                res = false;
-            }
+            
             if (!MathUtils.IsPow2(width) || !MathUtils.IsPow2(height))
-            {
                 Logger.Log(MessageType.Warn, $"Image dimensions are not powers of 2. (file: {file})");
-                res = false;
-            }
-
-
+            
             return res;
         }
 
@@ -493,7 +511,7 @@ namespace Editor.Content
                 else return false;
 
                 var first_mip = Slices[0][0][0];
-                HasValidDimensions(first_mip.Width, first_mip.Height, file);
+                if (!HasValidDimensions(first_mip.Width, first_mip.Height, ArraySize, IsVolumeMap, file)) return false;
 
                 if (icon == null)
                 {
@@ -518,7 +536,37 @@ namespace Editor.Content
 
         public override bool Load(string file)
         {
-            return true;
+            Debug.Assert(File.Exists(file));
+            Debug.Assert(Path.GetExtension(file).ToLower() == AssetFileExtension);
+
+            try
+            {
+                using var reader = new BinaryReader(File.Open(file, FileMode.Open, FileAccess.Read));
+                ReadAssetFileHeader(reader);
+                ImportSettings.FromBinary(reader);
+
+                Width = reader.ReadInt32(); 
+                Height = reader.ReadInt32();
+                ArraySize = reader.ReadInt32();
+                Flags = (TextureFlags)reader.ReadInt32();
+                MipLevels = reader.ReadInt32();
+                Format = (DXGI_FORMAT)reader.ReadInt32();
+                var compressedLength = reader.ReadInt32();
+                Debug.Assert(compressedLength > 0);
+                var compressed = reader.ReadBytes(compressedLength);
+                Decompress(compressed);
+
+                HasValidDimensions(Width, Height, ArraySize, IsVolumeMap, file);
+                FullPath = file;
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+                Logger.Log(MessageType.Error, $"Failed to load texture asset from file {file}");
+            }
+            return false;
         }
 
         public override byte[] PackForEngine()
@@ -580,5 +628,11 @@ namespace Editor.Content
         }
         
         public Texture() : base(AssetType.Texture) { }
+
+        public Texture(IAssetImportSettings importSettings) : this()
+        {
+            Debug.Assert(importSettings is TextureImportSettings);
+            ImportSettings = (TextureImportSettings)importSettings;
+        }
     }
 }

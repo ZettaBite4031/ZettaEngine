@@ -1,4 +1,5 @@
 ﻿using Editor.Content;
+using Editor.DLLWrapper;
 using Editor.GameProject;
 using System;
 using System.Collections.Generic;
@@ -65,6 +66,7 @@ namespace Editor
             {
                 Closing -= OnMainWindowClosing;
                 Project.Current?.Unload();
+                ContentToolsAPI.ShutdownContentTools();
             }
         }
 

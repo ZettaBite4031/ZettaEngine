@@ -11,7 +11,7 @@ namespace Editor.Dictionaries
 {
     public partial class ControlTemplates : ResourceDictionary
     {
-        private void OnTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        private void OnTextBox_KeyDown(object sender, KeyEventArgs e)
         {
             var textBox = sender as TextBox;
             var exp = textBox.GetBindingExpression(TextBox.TextProperty);
@@ -31,23 +31,43 @@ namespace Editor.Dictionaries
             }
         }
 
+        private void OnTextBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            var textBox = sender as TextBox;
+            var exp = textBox.GetBindingExpression(TextBox.TextProperty);
+            exp?.UpdateTarget();
+
+            (sender as TextBox).SelectAll();
+        }
+
         private void OnTextBoxRename_KeyDown(object sender, KeyEventArgs e)
         {
             var textBox = sender as TextBox;
             var exp = textBox.GetBindingExpression(TextBox.TextProperty);
             if (exp == null) return;
 
-            if (e.Key == Key.Enter)
+            void UpdateSource()
             {
                 if (textBox.Tag is ICommand command && command.CanExecute(textBox.Text)) command.Execute(textBox.Text);
                 else exp.UpdateSource();
+            }
+
+            if (e.Key == Key.Enter)
+            {
+                UpdateSource();
                 e.Handled = true;
-                textBox.Visibility = Visibility.Collapsed;
+                Keyboard.ClearFocus();
+            }
+            else if (e.Key == Key.Tab)
+            {
+                UpdateSource();
+                e.Handled = true;
+                Keyboard.ClearFocus();
             }
             else if (e.Key == Key.Escape)
             {
                 exp.UpdateTarget();
-                textBox.Visibility = Visibility.Collapsed;
+                Keyboard.ClearFocus();
             }
         }
 
@@ -80,7 +100,5 @@ namespace Editor.Dictionaries
             var window = (Window)((FrameworkElement)sender).TemplatedParent;
             window.WindowState = WindowState.Minimized;
         }
-
-        
     }
 }

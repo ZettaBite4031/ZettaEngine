@@ -31,6 +31,17 @@ namespace Editor.Utilities
             return Math.Abs(value.Value - other.Value) < Epsilon;
         }
 
+        public static bool IsEquals(this double value, double other)
+        {
+            return Math.Abs(value - other) < Epsilon;
+        }
+
+        public static bool IsEquals(this double? value, double? other)
+        {
+            if (!value.HasValue || !other.HasValue) return false;
+            return Math.Abs(value.Value - other.Value) < Epsilon;
+        }
+
         public static long AlignSizeUp(long size, long alignment)
         {
             Debug.Assert(alignment > 0, "Alignment must be non-zero");

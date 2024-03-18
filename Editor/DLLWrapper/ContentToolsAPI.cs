@@ -38,7 +38,9 @@ namespace Editor.ContentToolsAPIStructs
         [Description("Source images do not have the same format")]
         FormatMismatch,
         [Description("Source image file not found")]
-        FileNotFound
+        FileNotFound,
+        [Description("Cube maps can only be made with a multiple of 6 images")]
+        NeedSixImages
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -165,6 +167,9 @@ namespace Editor.DLLWrapper
     {
         private const string _ToolsDLL = "ContentToolsDLL.dll";
 
+        [DllImport(_ToolsDLL)]
+        public static extern void ShutdownContentTools();
+
         #region Geometry
         private static void GeometryFromSceneData(Content.Geometry geometry, Action<SceneData> sceneDataGenerator, string failureMessage)
         {
@@ -250,6 +255,14 @@ namespace Editor.DLLWrapper
             return SlicesFromBinary(icon, 1, 1, false).First()?.First()?.First();
         }
 
+        private static void SetSubresourceData(List<List<List<Slice>>> slices, TextureData data)
+        {
+            var subresourceData = SlicesToBinary(slices);
+            data.SubresourceData = Marshal.AllocCoTaskMem(subresourceData.Length);
+            data.SubresourceSize = subresourceData.Length;
+            Marshal.Copy(subresourceData, 0, data.SubresourceData, data.SubresourceSize);
+        }
+
         public static List<List<List<Slice>>> SlicesFromBinary(byte[] data, int size, int mips, bool isVM)
         {
             Debug.Assert(data?.Length > 0 && size > 0);
@@ -294,6 +307,38 @@ namespace Editor.DLLWrapper
         }
 
         [DllImport(_ToolsDLL)]
+        private static extern void Decompress([In, Out] TextureData data);
+
+        internal static List<List<List<Slice>>> Decompress(Texture texture)
+        {
+            Debug.Assert(texture.ImportSettings.Compress);
+            using var textureData = new TextureData();
+
+            try
+            {
+                GetTextureDataInfo(texture, textureData);
+                textureData.ImportSettings.FromContentSettings(texture);
+                SetSubresourceData(texture.Slices, textureData);
+
+                Decompress(textureData);
+
+                if (textureData.Info.ImportError != 0)
+                {
+                    Logger.Log(MessageType.Error, $"Error: {EnumExtensions.GetDescription((TextureImportError)textureData.Info.ImportError)}");
+                    throw new Exception($"Error while trying to decompress mipmaps. Error code {textureData.Info.ImportError}");
+                }
+
+                return GetSlices(textureData);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+                Logger.Log(MessageType.Error, $"Failed to decompress texture: {texture.FileName}");
+                return new();
+            }
+        }
+
+        [DllImport(_ToolsDLL)]
         private static extern void Import([In, Out] TextureData data);
 
         internal static (List<List<List<Slice>>> slices, Slice icon) Import(Texture texture)
@@ -303,10 +348,9 @@ namespace Editor.DLLWrapper
 
             try
             {
-                GetTextureDataInfo(texture, textureData);
                 textureData.ImportSettings.FromContentSettings(texture);
-
                 Import(textureData);
+
                 if (textureData.Info.ImportError != 0)
                 {
                     Logger.Log(MessageType.Error, $"Texture import error: {EnumExtensions.GetDescription((TextureImportError)textureData.Info.ImportError)}");
@@ -349,7 +393,6 @@ namespace Editor.DLLWrapper
             Debug.Assert(data?.Length > 0);
             return data;
         }
-
 
         #endregion Texture
     }

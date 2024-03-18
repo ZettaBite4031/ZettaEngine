@@ -6,12 +6,15 @@
     <ClCompile Include="fbxImporter.cpp" />
     <ClCompile Include="TextureImporter.cpp" />
     <ClCompile Include="NormalMapIdentification.cpp" />
+    <ClCompile Include="ContentTools.cpp" />
+    <ClCompile Include="assimpImporter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ToolsCommon.h" />
     <ClInclude Include="MeshPrimitives.h" />
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="fbxImporter.h" />
+    <ClInclude Include="assimpImporter.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

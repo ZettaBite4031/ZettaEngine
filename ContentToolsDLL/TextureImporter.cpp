@@ -23,6 +23,7 @@ namespace Zetta::Tools {
 				SizeMismatch,
 				FormatMismatch,
 				FileNotFound,
+				NeedSixImages,
 			};
 		};
 
@@ -74,16 +75,18 @@ namespace Zetta::Tools {
 		std::mutex					device_creation_mutex;
 		util::vector<D3D11_Device>  d3d11_devices;
 
-		util::vector<ComPtr<IDXGIAdapter>> GetAdaptersByPerformance() {
-			using PFN_CreateDXGIFactory1 = HRESULT(WINAPI*)(REFIID, void**);
-			static PFN_CreateDXGIFactory1 create_dxgi_factory1{ nullptr };
-			if (!create_dxgi_factory1) {
-				HMODULE dxgi_module{ LoadLibrary(L"dxgi.dll") };
-				if (!dxgi_module) return {};
+		HMODULE dxgi_module{ nullptr };
+		HMODULE d3d11_module{ nullptr };
 
-				create_dxgi_factory1 = (PFN_CreateDXGIFactory1)((void*)GetProcAddress(dxgi_module, "CreateDXGIFactory1"));
-				if (!create_dxgi_factory1) return {};
+		util::vector<ComPtr<IDXGIAdapter>> GetAdaptersByPerformance() {
+			if (!dxgi_module) {
+				dxgi_module = LoadLibrary(L"dxgi.dll");
+				if (!dxgi_module) return {};
 			}
+
+			using PFN_CreateDXGIFactory1 = HRESULT(WINAPI*)(REFIID, void**);
+			const PFN_CreateDXGIFactory1 create_dxgi_factory1{ (PFN_CreateDXGIFactory1)((void*)GetProcAddress(dxgi_module, "CreateDXGIFactory1")) };
+			if (!create_dxgi_factory1) return {};
 
 			ComPtr<IDXGIFactory7> factory;
 			util::vector<ComPtr<IDXGIAdapter>> adapters;
@@ -106,22 +109,21 @@ namespace Zetta::Tools {
 		void CreateDevice() {
 			if (d3d11_devices.size()) return;
 
-			util::vector<ComPtr<IDXGIAdapter>> adapters{ GetAdaptersByPerformance() };
-
-			static PFN_D3D11_CREATE_DEVICE d3d11_create_device{ nullptr };
-			if (!d3d11_create_device) {
-				HMODULE d3d11_module{ LoadLibrary(L"d3d11.dll") };
+			if (!d3d11_module) {
+				d3d11_module = LoadLibrary(L"d3d11.dll");
 				if (!d3d11_module) return;
-
-				d3d11_create_device = (PFN_D3D11_CREATE_DEVICE)((void*)GetProcAddress(d3d11_module, "D3D11CreateDevice"));
-				if (!d3d11_create_device) return;
 			}
+
+
+			const PFN_D3D11_CREATE_DEVICE d3d11_create_device{ (PFN_D3D11_CREATE_DEVICE)((void*)GetProcAddress(d3d11_module, "D3D11CreateDevice")) };
+			if (!d3d11_create_device) return;
 
 			u32 create_device_flags{ 0 };
 #ifdef _DEBUG
 			create_device_flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
+			util::vector<ComPtr<IDXGIAdapter>> adapters{ GetAdaptersByPerformance() };
 			util::vector<ComPtr<ID3D11Device>> devices(adapters.size(), nullptr);
 			constexpr D3D_FEATURE_LEVEL feature_levels[]{ D3D_FEATURE_LEVEL_11_0 };
 
@@ -227,7 +229,10 @@ namespace Zetta::Tools {
 					hr = working_scratch.InitializeArrayFromImages(images.data(), images.size(), allow_1D);
 				}
 				else if (settings.dimension == TextureDimension::TextureCube) {
-					assert(array_size % 6 == 0);
+					if (array_size % 6) {
+						data->info.import_error = ImportError::NeedSixImages;
+						return {};
+					}
 					hr = working_scratch.InitializeCubeFromImages(images.data(), array_size);
 				}
 				else {
@@ -327,6 +332,7 @@ namespace Zetta::Tools {
 			using namespace Zetta::Content;
 
 			const DXGI_FORMAT format{ metadata.format };
+			info.format = format;
 			info.width = (u32)metadata.width;
 			info.height = (u32)metadata.height;
 			info.array_size = metadata.IsVolumemap() ? (u32)metadata.depth : (u32)metadata.arraySize;
@@ -336,6 +342,7 @@ namespace Zetta::Tools {
 			SetOrClearFlag(info.flags, TextureFlags::IS_PREMULTIPLIED_ALPHA, metadata.IsPMAlpha());
 			SetOrClearFlag(info.flags, TextureFlags::IS_CUBE_MAP, metadata.IsCubemap());
 			SetOrClearFlag(info.flags, TextureFlags::IS_VOLUME_MAP, metadata.IsVolumemap());
+			SetOrClearFlag(info.flags, TextureFlags::IS_SRGB, IsSRGB(format));
 		}
 
 		DXGI_FORMAT DetermineOutputFormat(TextureData *const data, ScratchImage& scratch, const Image* const image) {
@@ -465,6 +472,16 @@ namespace Zetta::Tools {
 
 	void ShutdownTextureTools() {
 		d3d11_devices.clear();
+		
+		if (dxgi_module) {
+			FreeLibrary(dxgi_module);
+			dxgi_module = nullptr;
+		}
+
+		if (d3d11_module) {
+			FreeLibrary(d3d11_module);
+			d3d11_module = nullptr;
+		}
 	}
 
 	EDITOR_INTERFACE void Decompress(TextureData *const data) {
@@ -497,6 +514,8 @@ namespace Zetta::Tools {
 		else {
 			info.import_error = ImportError::Decompress;
 		}
+
+
 	}
 
 	EDITOR_INTERFACE void Import(TextureData *const data) {
@@ -565,7 +584,7 @@ namespace Zetta::Tools {
 			//		 Only do this for compressed imports. if not compressed, the editor
 			//		 Will pick the first image from the returned subresources.
 
-			ScratchImage bc_scratch{ /* TODO: compress image */};
+			ScratchImage bc_scratch{ CompressImage(data, scratch) };
 			if (data->info.import_error) return;
 
 			assert(bc_scratch.GetImages());

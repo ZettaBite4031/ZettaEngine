@@ -1,5 +1,6 @@
 ﻿using Editor.Content;
 using Editor.Utilities;
+using Microsoft.VisualStudio.TextManager.Interop;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -31,13 +32,26 @@ namespace Editor
     {
         public static T FindVisualParent<T>(this DependencyObject dpo) where T : DependencyObject
         {
-            if (!(dpo is Visual)) return null;
+            if (dpo is not Visual) return null;
            
             var parent = VisualTreeHelper.GetParent(dpo);
             while (parent != null)
             {
                 if (parent is T type) return type;
                 parent = VisualTreeHelper.GetParent(parent);
+            }
+            return null;
+        }
+
+        public static T FindVisualChild<T>(this DependencyObject dpo) where T : DependencyObject
+        {
+            if (dpo is not Visual) return null;
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(dpo); i++)
+            {
+                var child = VisualTreeHelper.GetChild(dpo, i);
+                var result = (child as T) ?? FindVisualChild<T>(child);
+                if (result != null) return result;
             }
             return null;
         }
@@ -72,10 +86,17 @@ namespace Editor
 
         public static bool IsOlder(this DateTime date, DateTime other) => date < other;
 
+        public static Uri GetPackUri(string releativePath, Type type)
+        {
+            var assemblyShortName = type.Assembly.ToString().Split(',')[0];
+            var packUriString = $"pack://application:,,,/{assemblyShortName};component/{releativePath}";
+            return new(packUriString);
+        }
+
         public static string SanitizeFileName(string v)
         {
             Debug.Assert(!string.IsNullOrEmpty(v));
-            var path = new StringBuilder(v.Substring(0, v.LastIndexOf(Path.DirectorySeparatorChar) + 1));
+            var path = new StringBuilder(v[..(v.LastIndexOf(Path.DirectorySeparatorChar) + 1)]);
             var file = new StringBuilder(v[(v.LastIndexOf(Path.DirectorySeparatorChar) + 1)..]);
             foreach (var c in Path.GetInvalidPathChars()) path.Replace(c, '_');
             foreach (var c in Path.GetInvalidFileNameChars()) file.Replace(c, '_');
@@ -92,27 +113,32 @@ namespace Editor
             return null;
         }
 
-        internal static async Task ImportFilesAsync(string[] files, string destination)
+        internal static async Task<List<Asset>> ImportFilesAsync(IEnumerable<AssetProxy> proxies)
         {
+            List<Asset> assets = new();
             try
             {
-                Debug.Assert(!string.IsNullOrEmpty(destination));
                 ContentWatcher.EnableFileWatcher(false);
-                var tasks = files.Select(async file => await Task.Run(() => { Import(file, destination); }));
+                var tasks = proxies.Select(async proxy =>
+                await Task.Run(() => {
+                    assets.Add(Import(proxy.FileInfo.FullName, proxy.ImportSettings, proxy.DstFolder));
+                }));
+
                 await Task.WhenAll(tasks);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Failed to import files to {destination}");
+                Debug.WriteLine($"Failed to import files.");
                 Debug.WriteLine(ex.Message);
             }
             finally
             {
                 ContentWatcher.EnableFileWatcher(true);
             }
+            return assets;
         }
 
-        private static Asset Import(string file, string destination)
+        private static Asset Import(string file, IAssetImportSettings importSettings, string destination)
         {
             Debug.Assert(!string.IsNullOrEmpty(file));
             if (IsDirectory(file)) return null;
@@ -122,8 +148,8 @@ namespace Editor
 
             Asset asset = ext switch
             {
-                { } when MeshFileExtensions.Contains(ext) => new Content.Geometry(),
-                { } when ImageFileExtensions.Contains(ext) => new Texture(),
+                { } when MeshFileExtensions.Contains(ext) => new Content.Geometry(importSettings),
+                { } when ImageFileExtensions.Contains(ext) => new Texture(importSettings),
                 { } when AudioFileExtensions.Contains(ext) => null,
                 _ => null
             };
@@ -207,9 +233,7 @@ namespace Editor
                 // swap R and B channels: RGB => BGR
                 for (int i = 0; i < data.Length; i += bytesPerPixel)
                 {
-                    var r = bgrData[i + 2];
-                    bgrData[i + 2] = bgrData[i];
-                    bgrData[i] = r;
+                    (bgrData[i], bgrData[i + 2]) = (bgrData[i + 2], bgrData[i]);
                 }
             }
             else if (bytesPerPixel == 2)
@@ -217,11 +241,11 @@ namespace Editor
                 bgrData = new byte[slice.Width * slice.Height * 3];
                 stride = slice.Width * 3;
                 int index = 0;
-                for (int i = 0; i < data.Length; i+= 2)
+                for (int i = 0; i < data.Length; i += 2)
                 {
                     
-                    bgrData[index + 2] = data[i + 1];
-                    bgrData[index + 1] = data[i + 2];
+                    bgrData[index + 2] = data[i + 0];
+                    bgrData[index + 1] = data[i + 1];
                     bgrData[index + 0] = 0;
                     index += 3;
                 }

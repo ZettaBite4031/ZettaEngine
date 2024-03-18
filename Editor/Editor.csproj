@@ -45,6 +45,7 @@
     <Compile Include="App.xaml.cs" />
 	<Compile Include="AssemblyInfo.cs" />
     <Compile Include="Common\CommandRelay.cs" />
+    <Compile Include="Common\Converter.cs" />
     <Compile Include="Common\Helpers.cs" />
     <Compile Include="Common\ViewModelBase.cs" />
     <Compile Include="Components\Component.cs" />
@@ -58,8 +59,14 @@
     <Compile Include="Content\ContentBrowser\ContentBrowserView.xaml.cs" />
     <Compile Include="Content\ContentBrowser\ContentInfoCache.cs" />
     <Compile Include="Content\ContentBrowser\SaveDialog.xaml.cs" />
+    <Compile Include="Content\ContentBrowser\SelectFolderDialog.xaml.cs" />
     <Compile Include="Content\ContentWatcher.cs" />
     <Compile Include="Content\Geometry.cs" />
+    <Compile Include="Content\ImportSettingsConfig\ChangeDestinationFolder.xaml.cs" />
+    <Compile Include="Content\ImportSettingsConfig\ConfigureGeometryImportSettings.xaml.cs" />
+    <Compile Include="Content\ImportSettingsConfig\ConfigureImportSettings.cs" />
+    <Compile Include="Content\ImportSettingsConfig\ConfigureImportSettingsWindow.xaml.cs" />
+    <Compile Include="Content\ImportSettingsConfig\GeometryImportSettingsView.xaml.cs" />
     <Compile Include="Content\PrimitiveMeshDialog.xaml.cs" />
     <Compile Include="Content\Texture.cs" />
     <Compile Include="Dictionaries\ControlTemplates.xaml.cs" />
@@ -70,6 +77,10 @@
     <Compile Include="Editors\GeometryEditor\GeometryEditorView.xaml.cs" />
     <Compile Include="Editors\GeometryEditor\GeometryView.xaml.cs" />
     <Compile Include="Editors\IAssetEditor.cs" />
+    <Compile Include="Editors\TextureEditor\TextureDetailsView.xaml.cs" />
+    <Compile Include="Editors\TextureEditor\TextureEditor.cs" />
+    <Compile Include="Editors\TextureEditor\TextureEditorView.xaml.cs" />
+    <Compile Include="Editors\TextureEditor\TextureView.xaml.cs" />
     <Compile Include="Editors\WorldEditor\ComponentView.xaml.cs" />
     <Compile Include="Editors\WorldEditor\GameEntityView.xaml.cs" />
     <Compile Include="Editors\WorldEditor\ProjectLayoutView.xaml.cs" />
@@ -98,6 +109,10 @@
     <Compile Include="Utilities\UndoRedoView.xaml.cs" />
     <Compile Include="Utilities\Utilities.cs" />
     <Compile Include="EnginePathDialog.xaml.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\TextureEditor\Checker64.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -133,6 +148,7 @@
     <None Include="Resources\PrimitiveMeshView\Checkmap.jpg" />
     <None Include="Resources\PrimitiveMeshView\Checkmap.png" />
     <None Include="Resources\PrimitiveMeshView\schizo.png" />
+    <Resource Include="Resources\TextureEditor\ChannelSelectShader.cso" />
   </ItemGroup>
 
   <ItemGroup>
@@ -145,6 +161,21 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Content\ContentBrowser\SaveDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Content\ContentBrowser\SelectFolderDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Content\ImportSettingsConfig\ChangeDestinationFolder.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Content\ImportSettingsConfig\ConfigureGeometryImportSettings.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Content\ImportSettingsConfig\ConfigureImportSettingsWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Content\ImportSettingsConfig\GeometryImportSettingsView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Content\PrimitiveMeshDialog.xaml">
@@ -163,6 +194,15 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Editors\GeometryEditor\GeometryView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Editors\TextureEditor\TextureDetailsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Editors\TextureEditor\TextureEditorView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Editors\TextureEditor\TextureView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Editors\WorldEditor\ComponentView.xaml">
@@ -222,6 +262,21 @@
     <None Update="Content\ContentBrowser\SaveDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
+    <None Update="Content\ContentBrowser\SelectFolderDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Content\ImportSettingsConfig\ChangeDestinationFolder.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Content\ImportSettingsConfig\ConfigureGeometryImportSettings.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Content\ImportSettingsConfig\ConfigureImportSettingsWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Content\ImportSettingsConfig\GeometryImportSettingsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
     <None Update="Content\PrimitiveMeshDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
@@ -238,6 +293,15 @@
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Editors\GeometryEditor\GeometryView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Editors\TextureEditor\TextureDetailsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Editors\TextureEditor\TextureEditorView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="Editors\TextureEditor\TextureView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>
     <None Update="Editors\WorldEditor\ComponentView.xaml">
