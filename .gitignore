@@ -365,3 +365,4 @@ FodyWeavers.xsd
 /ContentToolsDLL/assimp/build/CMakeFiles
 /ContentToolsDLL/assimp
 /assimp-vc143-mtd.dll
+/EngineTest/scene.gltf

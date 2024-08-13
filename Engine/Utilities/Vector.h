@@ -36,7 +36,7 @@ namespace Zetta::util {
 			return *this;
 		}
 
-		constexpr vector& operator=(const vector&& o) {
+		constexpr vector& operator=(vector&& o) {
 			assert(this != std::addressof(o));
 			if (this != std::addressof(o)) {
 				Destroy();
