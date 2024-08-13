@@ -10,4 +10,6 @@ namespace Zetta::Tools {
 	struct Scene;
 	struct Mesh;
 	struct GeometryImportSettings;
+
+	EDITOR_INTERFACE void ImportASSIMP(const char* file, SceneData* data);
 }
