@@ -59,7 +59,7 @@ namespace Editor
 
     public static class ContentHelper
     {
-        public static string[] MeshFileExtensions { get; } = { ".fbx" };
+        public static string[] MeshFileExtensions { get; } = { ".fbx", ".gltf" };
         public static string[] ImageFileExtensions { get; } = { ".bmp", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".tga", ".dds", ".hdr"};
         public static string[] AudioFileExtensions { get; } = { ".ogg", ".wav" };
 
@@ -118,6 +118,7 @@ namespace Editor
             List<Asset> assets = new();
             try
             {
+                ImportingItemsCollection.Init();
                 ContentWatcher.EnableFileWatcher(false);
                 var tasks = proxies.Select(async proxy =>
                 await Task.Run(() => {
@@ -169,10 +170,13 @@ namespace Editor
             if (!destination.EndsWith(Path.DirectorySeparatorChar)) destination += Path.DirectorySeparatorChar;
             asset.FullPath = destination + name + Asset.AssetFileExtension;
 
+            var importingItem = new ImportingItem(name, asset);
+            ImportingItemsCollection.Add(importingItem);
             bool import_suceeded = false;
 
             try
             {
+                Debug.Assert(asset.FullPath?.Contains(destination) == true);
                 import_suceeded = !string.IsNullOrEmpty(file) && asset.Import(file);
 
                 if (import_suceeded) asset.Save(asset.FullPath);
@@ -181,7 +185,7 @@ namespace Editor
             }
             finally
             {
-                // TODO: UI stuff for import status
+                importingItem.Status = import_suceeded ? ImportStatus.Succeeded : ImportStatus.Failed;
             }
 
         }

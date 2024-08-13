@@ -53,17 +53,39 @@ namespace Zetta::Tools {
 			root = _fbx_scene->GetRootNode();
 			if (!root) return;
 		}
-
+		
 		const s32 num_nodes{ root->GetChildCount() };
-		for (s32 i{ 0 }; i < num_nodes; i++) {
-			FbxNode* node{ root->GetChild(i) };
-			if (!node) continue;
 
+		if (_scene_data->settings.coalesce_meshes) {
 			LODGroup lod{};
-			GetMeshes(node, lod.meshes, 0, -1.f);
+			for (s32 i{ 0 }; i < num_nodes; i++) {
+				FbxNode* node{ root->GetChild(i) };
+				if (!node) continue;
+
+				GetMeshes(node, lod.meshes, 0, -1.f);
+			}
+
 			if (lod.meshes.size()) {
 				lod.name = lod.meshes[0].name;
+				Mesh combined_mesh{};
+				if (CoalesceMeshes(lod, combined_mesh, _progression)) {
+					lod.meshes.clear();
+					lod.meshes.emplace_back(combined_mesh);
+				}
 				_scene->lod_groups.emplace_back(lod);
+			}
+		}
+		else {
+			for (s32 i{ 0 }; i < num_nodes; i++) {
+				FbxNode* node{ root->GetChild(i) };
+				if (!node) continue;
+
+				LODGroup lod{};
+				GetMeshes(node, lod.meshes, 0, -1.f);
+				if (lod.meshes.size()) {
+					lod.name = lod.meshes[0].name;
+					_scene->lod_groups.emplace_back(lod);
+				}
 			}
 		}
 	}
@@ -110,7 +132,10 @@ namespace Zetta::Tools {
 		m.lod_threshold = lod_threshold;
 		m.name = (node->GetName()[0] != '\0') ? node->GetName() : fbx_mesh->GetName();
 
-		if (GetMeshData(fbx_mesh, m)) meshes.emplace_back(m);
+		if (GetMeshData(fbx_mesh, m)) {
+			meshes.emplace_back(m);
+			_progression->Callback(_progression->Value(), _progression->Maximum() + 1);
+		}
 	}
 
 	void FBXContext::GetLODGroup(FbxNodeAttribute* attribute) {
@@ -241,18 +266,20 @@ namespace Zetta::Tools {
 		return true;
 	}
 
-	EDITOR_INTERFACE void ImportFBX(const char* file, SceneData* data) {
+	EDITOR_INTERFACE void ImportFBX(const char* file, SceneData* data, Progression::ProgressCallback callback) {
 		assert(file && data);
 		Scene scene{};
+		Progression progression{ callback };
 
 		{
 			std::lock_guard lock{ fbx_mutex };
-			FBXContext fbx_context{ file, &scene, data };
+			FBXContext fbx_context{ file, &scene, data, &progression };
 			if (fbx_context.IsValid()) fbx_context.GetScene();
-			else return;
 		}
 
-		ProcessScene(scene, data->settings);
+		if (scene.lod_groups.empty()) return;
+
+		ProcessScene(scene, data->settings, &progression);
 		PackData(scene, *data);
 	}
 }

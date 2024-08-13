@@ -12,12 +12,12 @@
     <UniformGrid Rows="7" VerticalAlignment="Top">
         <DockPanel VerticalAlignment="Center">
             <TextBlock Text="Normals" Width="150"/>
-            <ComboBox x:Name="normalComboBox" SelectedIndex="{Binding CalculateNormals}">
+            <ComboBox x:Name="normalsComboBox" SelectedIndex="{Binding CalculateNormals}">
                 <ComboBoxItem Content="Import"/>
                 <ComboBoxItem Content="Calculate"/>
             </ComboBox>
         </DockPanel>
-        <DockPanel VerticalAlignment="Center">
+        <DockPanel Margin="0,2" VerticalAlignment="Center">
             <TextBlock Text="Tangents" Width="150"/>
             <ComboBox SelectedIndex="{Binding CalculateTangents}">
                 <ComboBoxItem Content="Import"/>
@@ -43,7 +43,7 @@
         </DockPanel>
         <DockPanel Margin="0,2" VerticalAlignment="Center" LastChildFill="False">
             <TextBlock Text="Coalesce Meshes" Width="150"/>
-            <CheckBox Margin="-1,0,0,0" d:IsChecked="False"/>
+            <CheckBox IsChecked="{Binding CoalesceMeshes}" Margin="-1,0,0,0" d:IsChecked="False"/>
         </DockPanel>
     </UniformGrid>
 </UserControl>

@@ -259,8 +259,8 @@ namespace Zetta::Tools {
 		Scene scene{};
 		creators[info->type](scene, *info);
 
-		data->settings.calculate_normals = 1;
-		ProcessScene(scene, data->settings);
+        Progression progression{};
+        ProcessScene(scene, data->settings, &progression);
 		PackData(scene, *data);
 	}
 }

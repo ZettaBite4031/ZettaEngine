@@ -64,7 +64,8 @@ namespace Zetta::Tools {
                         {
                             // this value represents the cosine of the angle between normals.
                             f32 cos_theta{ 0.f };
-                            XMVECTOR n2{ XMLoadFloat3(&m.normals[refs[k]]) };
+                            u32& r = refs[k];
+                            XMVECTOR n2{ XMLoadFloat3(&m.normals[r]) };
                             if (!is_soft_edge)
                             {
                                 // NOTE: we're accounting for the length of n1 in this calculation because
@@ -325,16 +326,19 @@ namespace Zetta::Tools {
             }
         }
 
-        void DetermineElementType(Mesh& m) {
+        Elements::ElementsType::Type DetermineElementType(const Mesh& m) {
             using namespace Elements;
+            Elements::ElementsType::Type type;
             if (m.normals.size()) {
                 if (m.uv_sets.size() && m.uv_sets[0].size())
-                    m.elements_type = ElementsType::StaticNormalTexture;
-                else m.elements_type = ElementsType::StaticNormal;
+                    type = ElementsType::StaticNormalTexture;
+                else type = ElementsType::StaticNormal;
             }
-            else if (m.colors.size()) m.elements_type = ElementsType::StaticColor;
+            else if (m.colors.size()) type = ElementsType::StaticColor;
             
             // TODO: Implement Skeletal meshes when the data is available.
+            
+            return type;
         }
 
         void ProcessVertices(Mesh& m, const GeometryImportSettings& settings)
@@ -348,7 +352,7 @@ namespace Zetta::Tools {
             if (!m.uv_sets.empty())
                 ProcessUVs(m);
             
-            DetermineElementType(m);
+            m.elements_type = DetermineElementType(m);
             PackVertices(m);
         }
 
@@ -488,7 +492,9 @@ namespace Zetta::Tools {
             return !submesh.raw_indices.empty();
         }
 
-        void SplitMeshesByMaterial(Scene& scene) {
+        void SplitMeshesByMaterial(Scene& scene, Progression* const progression) {
+            assert(progression);
+            progression->Callback(0, 0);
             for (auto& lod : scene.lod_groups) {
                 util::vector<Mesh> new_meshes;
                 for (auto& m : lod.meshes) {
@@ -496,25 +502,39 @@ namespace Zetta::Tools {
                     if (num_materials > 1) {
                         for (u32 i{ 0 }; i < num_materials; i++) {
                             Mesh submesh{};
-                            if (SplitMeshesByMaterial(m.material_used[i], m, submesh))
+                            if (SplitMeshesByMaterial(m.material_used[i], m, submesh)) {
                                 new_meshes.emplace_back(submesh);
+                            }
                         }
                     }
-                    else new_meshes.emplace_back(m);
+                    else {
+                        new_meshes.emplace_back(m);
+                    }
                 }
+                progression->Callback(progression->Value(), progression->Maximum() + (u32)new_meshes.size());
                 new_meshes.swap(lod.meshes);
             }
         }
 
+        template<typename T>
+        void AppendToVectorPOD(util::vector<T>& dst, const util::vector<T>& src) {
+            if (src.empty()) return;
+            const u32 num_elements{ (u32)dst.size() };
+            dst.resize(dst.size() + src.size());
+            memcpy(&dst[num_elements], src.data(), src.size() * sizeof(T));
+        }
+
     } // anonymous namespace
 
-    void ProcessScene(Scene& scene, const GeometryImportSettings& settings)
+    void ProcessScene(Scene& scene, const GeometryImportSettings& settings, Progression* const progression)
     {
-        SplitMeshesByMaterial(scene);
+        SplitMeshesByMaterial(scene, progression);
 
         for (auto& lod : scene.lod_groups)
-            for (auto& m : lod.meshes)
+            for (auto& m : lod.meshes) {
                 ProcessVertices(m, settings);
+                progression->Callback(progression->Value() + 1, progression->Maximum());
+            }
     }
 
     void PackData(const Scene& scene, SceneData& data)
@@ -547,4 +567,66 @@ namespace Zetta::Tools {
         assert(scene_size == blob.Offset());
     }
 
+    bool CoalesceMeshes(const LODGroup& lod, Mesh& combined_mesh, Progression* const progression) {
+        assert(lod.meshes.size());
+        const Mesh& first_mesh{ lod.meshes[0] };
+        combined_mesh.name = first_mesh.name;
+        combined_mesh.elements_type = DetermineElementType(first_mesh);
+        combined_mesh.lod_threshold = first_mesh.lod_threshold;
+        combined_mesh.lod_id = first_mesh.lod_id;
+        combined_mesh.uv_sets.resize(first_mesh.uv_sets.size());
+
+        for (u32 mesh_idx{ 0 }; mesh_idx < lod.meshes.size(); mesh_idx++) {
+            const Mesh& m{ lod.meshes[mesh_idx] };
+
+            if (combined_mesh.elements_type != DetermineElementType(m) ||
+                combined_mesh.uv_sets.size() != m.uv_sets.size() ||
+                combined_mesh.lod_id != m.lod_id ||
+                !Math::IsEqual(combined_mesh.lod_threshold, m.lod_threshold)) {
+                combined_mesh = {};
+                return false;
+            }
+        }
+
+        for (u32 mesh_idx{ 0 }; mesh_idx < lod.meshes.size(); mesh_idx++) {
+            const Mesh& m{ lod.meshes[mesh_idx] };
+
+            if (combined_mesh.elements_type != DetermineElementType(m) ||
+                combined_mesh.uv_sets.size() != m.uv_sets.size() ||
+                combined_mesh.lod_id != m.lod_id ||
+                !Math::IsEqual(combined_mesh.lod_threshold, m.lod_threshold)) {
+                combined_mesh = {};
+                return false;
+            }
+
+            const u32 position_count{ (u32)combined_mesh.positions.size() };
+            const u32 raw_index_base{ (u32)combined_mesh.raw_indices.size() };
+
+            AppendToVectorPOD(combined_mesh.positions, m.positions);
+            AppendToVectorPOD(combined_mesh.normals, m.normals);
+            AppendToVectorPOD(combined_mesh.tangents, m.tangents);
+            AppendToVectorPOD(combined_mesh.colors, m.colors);
+
+            for (u32 i{ 0 }; i < combined_mesh.uv_sets.size(); i++) {
+                AppendToVectorPOD(combined_mesh.uv_sets[i], m.uv_sets[i]);
+            }
+
+            AppendToVectorPOD(combined_mesh.material_indices, m.material_indices);
+            AppendToVectorPOD(combined_mesh.raw_indices, m.raw_indices);
+
+            for (u32 i{ raw_index_base }; i < combined_mesh.raw_indices.size(); i++) {
+                combined_mesh.raw_indices[i] += position_count;
+            }
+
+            progression->Callback(progression->Value(), progression->Maximum() > 0 ? progression->Maximum() - 1 : 1);
+        }
+
+        for (const u32 mtl_idx : combined_mesh.material_indices) {
+            if (std::find(combined_mesh.material_used.begin(), combined_mesh.material_used.end(), mtl_idx) == combined_mesh.material_used.end()) {
+                combined_mesh.material_used.emplace_back(mtl_idx);
+            }
+        }
+
+        return true;
+    }
 }

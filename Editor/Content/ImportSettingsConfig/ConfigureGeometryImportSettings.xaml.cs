@@ -61,5 +61,10 @@ namespace Editor.Content
                 item?.Focus();
             };
         }
+
+        private void OnClearImportingItems_Button_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
     }
 }

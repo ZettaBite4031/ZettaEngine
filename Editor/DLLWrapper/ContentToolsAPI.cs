@@ -1,19 +1,14 @@
 ﻿using Editor.Content;
 using Editor.ContentToolsAPIStructs;
-using Editor.GameProject;
 using Editor.Utilities;
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using System.Reflection.Emit;
 using System.Runtime.InteropServices;
-using System.Windows.Documents;
-using System.Xml.Serialization;
 
 namespace Editor.ContentToolsAPIStructs
 {
@@ -52,6 +47,7 @@ namespace Editor.ContentToolsAPIStructs
         public byte ReverseHandedness = 0;
         public byte ImportEmbededTextures = 1;
         public byte ImportAnimations = 1;
+        public byte CoalesceMeshes = 0;
 
         private byte ToByte(bool val) => val ? (byte)1 : (byte)0;
 
@@ -65,6 +61,7 @@ namespace Editor.ContentToolsAPIStructs
             ReverseHandedness = ToByte(settings.ReverseHandedness);
             ImportEmbededTextures = ToByte(settings.ImportEmbededTextures);
             ImportAnimations = ToByte(settings.ImportAnimations);
+            CoalesceMeshes = ToByte(settings.CoalesceMeshes);
         }
     }
 
@@ -166,6 +163,7 @@ namespace Editor.DLLWrapper
     static class ContentToolsAPI
     {
         private const string _ToolsDLL = "ContentToolsDLL.dll";
+        private delegate void ProgressionCallback(int value, int maximum);
 
         [DllImport(_ToolsDLL)]
         public static extern void ShutdownContentTools();
@@ -187,6 +185,7 @@ namespace Editor.DLLWrapper
             catch (Exception ex)
             {
                 Logger.Log(MessageType.Error, failureMessage);
+                Logger.Log(MessageType.Error, ex.Message);
                 Debug.WriteLine(ex.Message);
             }
         }
@@ -200,11 +199,21 @@ namespace Editor.DLLWrapper
         }
 
         [DllImport(_ToolsDLL)]
-        private static extern void ImportFBX(string file, [In, Out] SceneData data);
+        private static extern void ImportFBX(string file, [In, Out] SceneData data, ProgressionCallback callback);
         public static void ImportFBX(string file, Content.Geometry geometry)
         {
-            GeometryFromSceneData(geometry, (sceneData) => ImportFBX(file, sceneData), 
+            var item = ImportingItemsCollection.GetItem(geometry);
+            ProgressionCallback callback = item != null ? item.SetProgress : null;
+            GeometryFromSceneData(geometry, (sceneData) => ImportFBX(file, sceneData, callback), 
                 $"Failed to import from FBX file: {file}");
+        }
+
+        [DllImport(_ToolsDLL)]
+        private static extern void ImportASSIMP(string file, [In, Out] SceneData data);
+        public static void ImportASSIMP(string file, Content.Geometry geometry)
+        {
+            GeometryFromSceneData(geometry, (sceneData) => ImportASSIMP(file, sceneData),
+                $"Failed to import using ASSIMP: {file}");
         }
         #endregion Geometry
 

@@ -13,8 +13,8 @@ namespace Zetta::Tools {
 
 	class FBXContext {
 	public:
-		FBXContext(const char* file, Scene* scene, SceneData* data)
-			: _scene{ scene }, _scene_data{ data } {
+		FBXContext(const char* file, Scene* scene, SceneData* data, Progression* const progression)
+			: _scene{ scene }, _scene_data{ data }, _progression{ progression } {
 			assert(file && _scene && _scene_data);
 			if (InitializeFBX()) LoadFBXFile(file);
 		}
@@ -29,6 +29,8 @@ namespace Zetta::Tools {
 
 		constexpr bool IsValid() const { return _fbx_manager && _fbx_scene; }
 		constexpr f32 SceneScale() const { return _scene_scale; }
+		constexpr Progression* GetProgression() const { return _progression; }
+
 	private:
 		bool InitializeFBX();
 		void LoadFBXFile(const char* file);
@@ -41,6 +43,7 @@ namespace Zetta::Tools {
 		SceneData* _scene_data{ nullptr };
 		FbxManager* _fbx_manager{ nullptr };
 		FbxScene* _fbx_scene{ nullptr };
+		Progression* _progression{ nullptr };
 		f32 _scene_scale{ 1.0f };
 	};
 }

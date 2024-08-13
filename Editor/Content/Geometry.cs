@@ -266,6 +266,20 @@ namespace Editor.Content
 			}
 		}
 
+		private bool _CoalesceMeshes;
+		public bool CoalesceMeshes
+		{
+			get => _CoalesceMeshes;
+			set
+			{
+				if (_CoalesceMeshes != value)
+				{
+					_CoalesceMeshes = value;
+					OnPropertyChanged(nameof(CoalesceMeshes));
+				}
+			}
+		}
+
 		public GeometryImportSettings()
 		{
 			CalculateNormals = false;
@@ -274,6 +288,7 @@ namespace Editor.Content
 			ReverseHandedness = false;
 			ImportEmbededTextures = true;
 			ImportAnimations = true;
+			CoalesceMeshes = false;
 		}
 
 		public void ToBinary(BinaryWriter writer)
@@ -284,6 +299,7 @@ namespace Editor.Content
 			writer.Write(ReverseHandedness);
 			writer.Write(ImportEmbededTextures);
 			writer.Write(ImportAnimations);
+			writer.Write(CoalesceMeshes);
 		}
 
 		public void FromBinary(BinaryReader reader)
@@ -294,6 +310,7 @@ namespace Editor.Content
 			ReverseHandedness = reader.ReadBoolean();
 			ImportEmbededTextures = reader.ReadBoolean();
 			ImportAnimations = reader.ReadBoolean();
+			CoalesceMeshes |= reader.ReadBoolean();
 		}
 	}
 
@@ -407,6 +424,7 @@ namespace Editor.Content
 			Debug.Assert(!string.IsNullOrEmpty(FullPath));
 			var ext = Path.GetExtension(file).ToLower();
 			if (ext == ".fbx") return ImportFBX(file);
+			else if (ext == ".gltf") return ImportASSIMP(file, ext);
 			return false;
 		}
 
@@ -450,6 +468,37 @@ namespace Editor.Content
 
 			return res;
 		}
+
+		private bool ImportASSIMP(string file, string ext)
+		{
+			Logger.Log(MessageType.Info, $"Importing ASSIMP file {file}");
+			var tempPath = Application.Current.Dispatcher.Invoke(() => Project.Current.TempFolder);
+			if (string.IsNullOrEmpty(tempPath)) return false;
+
+            lock (_lock)
+            {
+				if (!Directory.Exists(tempPath)) Directory.CreateDirectory(tempPath);
+            }
+
+			var tempFile = $"{tempPath}{ContentHelper.GetRandomString()}{ext}";
+			File.Copy(file, tempFile, true);
+			bool res = false;
+			try
+			{
+				ContentToolsAPI.ImportASSIMP(tempFile, this);
+				res = true;
+			}
+			catch (Exception ex )
+			{
+                Debug.WriteLine(ex.Message);
+                string msg = $"Failed to import {file}";
+                Debug.WriteLine(msg);
+                Logger.Log(MessageType.Error, msg);
+            }
+
+
+			return res;
+        }
 
 		public override bool Load(string file)
 		{

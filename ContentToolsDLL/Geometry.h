@@ -142,6 +142,7 @@ namespace Zetta::Tools {
 		u8	reverse_handedness;
 		u8	import_embeded;
 		u8	import_animations;
+		u8  coalesce_meshes;
 	};
 
 	struct SceneData {
@@ -150,6 +151,7 @@ namespace Zetta::Tools {
 		GeometryImportSettings settings;
 	};
 
-	void ProcessScene(Scene& scene, const GeometryImportSettings& settings);
+	void ProcessScene(Scene& scene, const GeometryImportSettings& settings, Progression* const progression);
 	void PackData(const Scene& scene, SceneData& data);
+	bool CoalesceMeshes(const LODGroup& lod, Mesh& CombinedMesh, Progression* const prorgession);
 }
